@@ -1,0 +1,27 @@
+appId: com.interview-overlay.app
+productName: InterviewOverlay
+copyright: Copyright © 2024
+directories:
+  output: release
+  buildResources: assets
+files:
+  - out/**/*
+  - "!node_modules/**/*"
+  - node_modules/electron-store/**/*
+  - node_modules/node-addon-api/**/*
+extraResources:
+  - from: src/native/build/Release/
+    to: native/
+    filter:
+      - "*.node"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icons/app-icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

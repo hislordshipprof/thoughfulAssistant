@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+release/
+build/
+*.node
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+src/native/build/
+nul
+*temp_gist*
+eng.traineddata
+.claude/

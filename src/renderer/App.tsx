@@ -1,0 +1,176 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import OverlayPanel from './components/OverlayPanel';
+import SettingsModal from './components/SettingsModal';
+import { useStreamingResponse } from './hooks/useStreamingResponse';
+import { useHotkeys } from './hooks/useHotkeys';
+import { useIpcEvent } from './hooks/useIpc';
+
+const App: React.FC = () => {
+  const [interviewMode, setInterviewMode] = useState<string>('general');
+  const { response, isStreaming, error, reset } = useStreamingResponse(interviewMode === 'leetcode');
+  const [transcriptEntries, setTranscriptEntries] = useState<any[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPassthrough, setIsPassthrough] = useState(false);
+  const [aiProvider, setAiProvider] = useState<string | null>(null);
+  const [isStealthActive, setIsStealthActive] = useState(true);
+  const [screenshots, setScreenshots] = useState<string[]>([]);
+  const [extraContext, setExtraContext] = useState('');
+  const [isTypingMode, setIsTypingMode] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Listen for transcript updates
+  useIpcEvent('onTranscriptUpdate', useCallback((entries: any[]) => {
+    setTranscriptEntries(entries);
+  }, []));
+
+  // Listen for status updates
+  useIpcEvent('onStatusUpdate', useCallback((status: any) => {
+    setIsRecording(status.isRecording ?? false);
+    setAiProvider(status.aiProvider ?? null);
+    setIsStealthActive(status.isStealthActive ?? true);
+  }, []));
+
+  // Listen for screenshot captures (array of all accumulated screenshots)
+  useIpcEvent('onScreenshots', useCallback((dataUrls: string[]) => {
+    setScreenshots(dataUrls);
+  }, []));
+
+  // Typing mode — keystroke injection from native LL hook
+  useIpcEvent('onTypingMode', useCallback((active: boolean) => {
+    setIsTypingMode(active);
+  }, []));
+
+  // Clear extra context textarea when AI request consumes it
+  useIpcEvent('onExtraContextClear', useCallback(() => {
+    setExtraContext('');
+  }, []));
+
+  useIpcEvent('onTypingEvent', useCallback((event: any) => {
+    if (event.type === 'char') {
+      setExtraContext(prev => {
+        const newVal = prev + event.char;
+        window.electronAPI?.setExtraContext?.(newVal);
+        return newVal;
+      });
+    } else if (event.type === 'command') {
+      if (event.command === 'backspace') {
+        setExtraContext(prev => {
+          const newVal = prev.slice(0, -1);
+          window.electronAPI?.setExtraContext?.(newVal);
+          return newVal;
+        });
+      } else if (event.command === 'enter') {
+        setExtraContext(prev => {
+          const newVal = prev + '\n';
+          window.electronAPI?.setExtraContext?.(newVal);
+          return newVal;
+        });
+      }
+    }
+  }, []));
+
+  // Register hotkey handlers
+  useHotkeys({
+    toggleInteract: useCallback(() => {
+      setIsPassthrough(prev => {
+        const next = !prev;
+        document.body.classList.toggle('full-passthrough', next);
+        return next;
+      });
+    }, []),
+    openSettings: useCallback(() => {
+      setSettingsOpen(true);
+    }, []),
+    toggleRecording: useCallback(() => {
+      setIsRecording(prev => !prev);
+    }, []),
+    resetAll: useCallback(() => {
+      reset();
+      setTranscriptEntries([]);
+      setScreenshots([]);
+      setExtraContext('');
+      setIsTypingMode(false);
+      window.electronAPI?.setExtraContext?.('');
+    }, [reset]),
+    scrollUp: useCallback(() => {
+      scrollRef.current?.scrollBy({ top: -150, behavior: 'smooth' });
+    }, []),
+    scrollDown: useCallback(() => {
+      scrollRef.current?.scrollBy({ top: 150, behavior: 'smooth' });
+    }, [])
+  });
+
+  // Load initial config
+  useEffect(() => {
+    window.electronAPI?.getConfig?.('ai').then((ai: any) => {
+      if (ai?.provider) setAiProvider(ai.provider);
+      if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
+    });
+    window.electronAPI?.getRecordingState?.().then((state: boolean) => {
+      setIsRecording(state);
+    });
+  }, []);
+
+  const handleToggleRecording = useCallback(async () => {
+    const newState = await window.electronAPI?.toggleRecording();
+    setIsRecording(newState);
+  }, []);
+
+  const handleAskAi = useCallback(async () => {
+    const transcript = ''; // Main process will use its own stores
+    const ocrText = await window.electronAPI?.getLastOcrText() || '';
+    await window.electronAPI?.askAi(transcript, ocrText);
+  }, []);
+
+  const handleCaptureScreen = useCallback(async () => {
+    await window.electronAPI?.captureScreen();
+  }, []);
+
+  const handleExtraContextChange = useCallback((text: string) => {
+    setExtraContext(text);
+    window.electronAPI?.setExtraContext?.(text);
+  }, []);
+
+  return (
+    <>
+      <OverlayPanel
+        response={response}
+        isStreaming={isStreaming}
+        error={error}
+        transcriptEntries={transcriptEntries}
+        isRecording={isRecording}
+        aiProvider={aiProvider}
+        isStealthActive={isStealthActive}
+        isPassthrough={isPassthrough}
+        isTypingMode={isTypingMode}
+        screenshots={screenshots}
+        extraContext={extraContext}
+        scrollRef={scrollRef}
+        onSettingsClick={() => setSettingsOpen(true)}
+        onToggleRecording={handleToggleRecording}
+        onAskAi={handleAskAi}
+        onCaptureScreen={handleCaptureScreen}
+        onRemoveScreenshot={(index) => window.electronAPI?.removeScreenshot(index)}
+        onClearScreenshots={() => {
+          window.electronAPI?.clearScreenshots();
+          setScreenshots([]);
+        }}
+        onExtraContextChange={handleExtraContextChange}
+      />
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => {
+          setSettingsOpen(false);
+          // Refresh interviewMode in case it changed
+          window.electronAPI?.getConfig?.('ai').then((ai: any) => {
+            if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
+          });
+        }}
+      />
+      {isPassthrough && <div className="interact-mode-badge">PASSTHROUGH</div>}
+    </>
+  );
+};
+
+export default App;
