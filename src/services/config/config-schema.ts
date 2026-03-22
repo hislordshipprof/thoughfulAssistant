@@ -7,11 +7,13 @@ export const HotkeySchema = z.object({
 
 export const ConfigSchema = z.object({
   ai: z.object({
-    provider: z.enum(['openai', 'anthropic']).default('openai'),
+    provider: z.enum(['openai', 'anthropic', 'groq']).default('openai'),
     openaiKey: z.string().default(''),
     anthropicKey: z.string().default(''),
+    groqKey: z.string().default(''),
     openaiModel: z.string().default('gpt-4.1'),
     anthropicModel: z.string().default('claude-sonnet-4-5-20250929'),
+    groqModel: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
     interviewMode: z.enum(['leetcode', 'general']).default('general')
   }),
   audio: z.object({

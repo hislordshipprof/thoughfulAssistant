@@ -11,8 +11,10 @@ interface Settings {
     provider: string;
     openaiKey: string;
     anthropicKey: string;
+    groqKey: string;
     openaiModel: string;
     anthropicModel: string;
+    groqModel: string;
     interviewMode: string;
   };
   audio: {
@@ -107,6 +109,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             >
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic (Claude)</option>
+              <option value="groq">Groq (Fastest Inference)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -150,6 +153,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             </select>
           </div>
           <div className="settings-field">
+            <label className="settings-label">Groq Model</label>
+            <select
+              className="settings-select"
+              value={settings.ai.groqModel}
+              onChange={e => update('ai', 'groqModel', e.target.value)}
+            >
+              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision — 750 T/s)</option>
+              <option value="openai/gpt-oss-120b">GPT-OSS 120B (Reasoning — 500 T/s)</option>
+            </select>
+          </div>
+          <div className="settings-field">
             <label className="settings-label">OpenAI API Key</label>
             <input
               className="settings-input"
@@ -167,6 +181,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.anthropicKey}
               onChange={e => update('ai', 'anthropicKey', e.target.value)}
               placeholder="sk-ant-..."
+            />
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">Groq API Key</label>
+            <input
+              className="settings-input"
+              type="password"
+              value={settings.ai.groqKey}
+              onChange={e => update('ai', 'groqKey', e.target.value)}
+              placeholder="gsk_..."
             />
           </div>
         </div>

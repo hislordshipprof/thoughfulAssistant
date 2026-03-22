@@ -69,6 +69,10 @@ async function createApp(): Promise<void> {
     config.ai.anthropicKey = process.env.ANTHROPIC_API_KEY;
     configChanged = true;
   }
+  if (!config.ai.groqKey && process.env.GROQ_API_KEY) {
+    config.ai.groqKey = process.env.GROQ_API_KEY;
+    configChanged = true;
+  }
   if (configChanged) {
     configStore.set('ai', config.ai);
   }
@@ -113,8 +117,8 @@ async function createApp(): Promise<void> {
   ocrManager.setStealthToggle(windowManager);
 
   // Initialize AI providers
-  console.log(`[main] Initializing AI — provider: ${config.ai.provider}, openaiModel: ${config.ai.openaiModel}, anthropicModel: ${config.ai.anthropicModel}`);
-  aiManager.initializeProviders(config.ai.openaiKey, config.ai.anthropicKey, config.ai.openaiModel, config.ai.anthropicModel);
+  console.log(`[main] Initializing AI — provider: ${config.ai.provider}, openaiModel: ${config.ai.openaiModel}, anthropicModel: ${config.ai.anthropicModel}, groqModel: ${config.ai.groqModel}`);
+  aiManager.initializeProviders(config.ai.openaiKey, config.ai.anthropicKey, config.ai.openaiModel, config.ai.anthropicModel, config.ai.groqKey, config.ai.groqModel);
   if (config.ai.provider) {
     aiManager.setActiveProvider(config.ai.provider);
   }
@@ -219,10 +223,11 @@ async function createApp(): Promise<void> {
 
   configStore.onDidChange('ai', (newVal) => {
     if (newVal) {
-      console.log(`[main] AI config changed — provider: ${newVal.provider}, openaiModel: ${newVal.openaiModel}, anthropicModel: ${newVal.anthropicModel}`);
+      console.log(`[main] AI config changed — provider: ${newVal.provider}, openaiModel: ${newVal.openaiModel}, anthropicModel: ${newVal.anthropicModel}, groqModel: ${newVal.groqModel}`);
       if (newVal.provider) aiManager.setActiveProvider(newVal.provider);
       if (newVal.openaiModel) aiManager.setModel('openai', newVal.openaiModel);
       if (newVal.anthropicModel) aiManager.setModel('anthropic', newVal.anthropicModel);
+      if (newVal.groqModel) aiManager.setModel('groq', newVal.groqModel);
     }
   });
 

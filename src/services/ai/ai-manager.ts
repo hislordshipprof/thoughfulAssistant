@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { AiProvider, AiMessage, AiStreamEvent, getTextContent } from './ai-provider';
 import { OpenAiProvider } from './openai-provider';
 import { AnthropicProvider } from './anthropic-provider';
+import { GroqProvider } from './groq-provider';
 import { buildContextMessage, getSystemPrompt, isLiteModel } from './prompt-templates';
 
 export class AiManager extends EventEmitter {
@@ -16,16 +17,19 @@ export class AiManager extends EventEmitter {
     super();
   }
 
-  initializeProviders(openaiKey: string, anthropicKey: string, openaiModel?: string, anthropicModel?: string): void {
+  initializeProviders(openaiKey: string, anthropicKey: string, openaiModel?: string, anthropicModel?: string, groqKey?: string, groqModel?: string): void {
     if (openaiKey) {
       this.providers.set('openai', new OpenAiProvider(openaiKey, openaiModel));
     }
     if (anthropicKey) {
       this.providers.set('anthropic', new AnthropicProvider(anthropicKey, anthropicModel));
     }
+    if (groqKey) {
+      this.providers.set('groq', new GroqProvider(groqKey, groqModel));
+    }
 
-    // Default to OpenAI, fallback to Anthropic
-    this.activeProvider = this.providers.get('openai') || this.providers.get('anthropic') || null;
+    // Default to OpenAI, fallback to Anthropic, then Groq
+    this.activeProvider = this.providers.get('openai') || this.providers.get('anthropic') || this.providers.get('groq') || null;
   }
 
   setModel(provider: string, model: string): void {
@@ -67,7 +71,8 @@ export class AiManager extends EventEmitter {
     }
 
     const model = this.activeProvider.getModel();
-    const systemPrompt = getSystemPrompt(interviewMode || 'general', resume, jobDescription, model);
+    const providerName = this.activeProvider.name;
+    const systemPrompt = getSystemPrompt(interviewMode || 'general', resume, jobDescription, model, providerName);
 
     // For lite models in leetcode mode, determine phase externally from history
     let litePhase: number | undefined;
@@ -163,6 +168,8 @@ export class AiManager extends EventEmitter {
       this.providers.set('openai', new OpenAiProvider(key));
     } else if (provider === 'anthropic') {
       this.providers.set('anthropic', new AnthropicProvider(key));
+    } else if (provider === 'groq') {
+      this.providers.set('groq', new GroqProvider(key));
     }
   }
 }

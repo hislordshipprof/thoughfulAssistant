@@ -5,8 +5,11 @@ export const defaultConfig: AppConfig = {
     provider: 'openai',
     openaiKey: '',
     anthropicKey: '',
+    groqKey: '',
     openaiModel: 'gpt-4o',
-    anthropicModel: 'claude-sonnet-4-5-20250929'
+    anthropicModel: 'claude-sonnet-4-5-20250929',
+    groqModel: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    interviewMode: 'general'
   },
   audio: {
     transcriptionMode: 'deepgram',
@@ -25,6 +28,7 @@ export const defaultConfig: AppConfig = {
     opacity: 0.85,
     width: 500,
     height: 600,
+    fontSize: 14,
     x: 100,
     y: 100,
     clickThrough: false
