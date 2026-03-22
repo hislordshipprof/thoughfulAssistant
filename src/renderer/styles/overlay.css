@@ -232,6 +232,7 @@ body.full-passthrough .interact-mode-badge {
   min-height: 0;
   overflow-y: auto;
   padding: 12px;
+  font-size: var(--content-font-size, 14px);
 }
 
 /* AI Response View */
@@ -244,13 +245,20 @@ body.full-passthrough .interact-mode-badge {
   margin: 12px 0 6px;
 }
 
-.ai-response h1 { font-size: 16px; }
-.ai-response h2 { font-size: 14px; }
-.ai-response h3 { font-size: 13px; }
+.ai-response h1 { font-size: 1.3em; }
+.ai-response h2 { font-size: 1.15em; }
+.ai-response h3 { font-size: 1.05em; }
 
 .ai-response p {
   margin: 10px 0;
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* Add vertical spacing between sentences (line breaks from breaks prop) */
+.ai-response p br {
+  display: block;
+  content: '';
+  margin-bottom: 6px;
 }
 
 .ai-response pre {
@@ -260,11 +268,11 @@ body.full-passthrough .interact-mode-badge {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 0.95em;
 }
 
 .ai-response code {
-  font-size: 12px;
+  font-size: 0.95em;
 }
 
 .ai-response :not(pre) > code {

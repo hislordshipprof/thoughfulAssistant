@@ -30,6 +30,7 @@ interface Settings {
     opacity: number;
     width: number;
     height: number;
+    fontSize: number;
   };
   resume: string;
   jobDescription: string;
@@ -104,7 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.provider}
               onChange={e => update('ai', 'provider', e.target.value)}
             >
-              <option value="openai">OpenAI (GPT-4o)</option>
+              <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic (Claude)</option>
             </select>
           </div>
@@ -126,10 +127,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.openaiModel}
               onChange={e => update('ai', 'openaiModel', e.target.value)}
             >
-              <option value="gpt-4o">GPT-4o (Best Quality)</option>
-              <option value="gpt-4o-mini">GPT-4o Mini (Fast)</option>
-              <option value="gpt-4.1">GPT-4.1 (Latest)</option>
-              <option value="gpt-4.1-mini">GPT-4.1 Mini (Latest Fast)</option>
+              <option value="gpt-5.4">GPT-5.4 (Most Capable)</option>
+              <option value="gpt-5.4-mini">GPT-5.4 Mini (Fast + Capable)</option>
+              <option value="gpt-5.4-nano">GPT-5.4 Nano (Fastest + Cheapest)</option>
+              <option value="gpt-4.1">GPT-4.1 (Best Quality + Instruction Following)</option>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini (Fast + Cheap)</option>
+              <option value="gpt-4.1-nano">GPT-4.1 Nano (Fastest + Cheapest)</option>
+              <option value="gpt-4o">GPT-4o (Legacy)</option>
+              <option value="gpt-4o-mini">GPT-4o Mini (Legacy Fast)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -141,6 +146,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             >
               <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Best Quality)</option>
               <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+              <option value="claude-opus-4-6">Claude Opus 4.6 (Most Capable)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -262,6 +268,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 const val = parseInt(e.target.value) / 100;
                 update('overlay', 'opacity', val);
                 api.setOpacity(val);
+              }}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">Font Size ({settings.overlay.fontSize}px)</label>
+            <input
+              type="range"
+              min={10}
+              max={24}
+              value={settings.overlay.fontSize}
+              onChange={e => {
+                const val = parseInt(e.target.value);
+                update('overlay', 'fontSize', val);
+                document.documentElement.style.setProperty('--content-font-size', val + 'px');
               }}
               style={{ width: '100%' }}
             />

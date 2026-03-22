@@ -14,14 +14,18 @@ export function registerIpcHandlers(
   windowManager: WindowManager
 ): void {
   // AI handlers
-  ipcMain.handle('ai:ask', async (_event, transcript: string, ocrText: string, query?: string) => {
+  ipcMain.handle('ai:ask', async (_event, transcript: string, _ocrText: string, query?: string) => {
     const cfg = configStore.getAll();
     const interviewMode = cfg.ai.interviewMode || 'general';
-    aiManager.ask(transcript, ocrText, query, interviewMode, cfg.resume, cfg.jobDescription);
+    // Pass screenshots directly as images for vision model (no OCR)
+    const allCaptures = ocrManager.getAllCaptures();
+    const screenshotDataUrls = allCaptures.map(c => c.image.imageDataUrl);
+    aiManager.ask(transcript, screenshotDataUrls, query, interviewMode, cfg.resume, cfg.jobDescription);
     return true;
   });
 
   ipcMain.handle('ai:context', (_event, text: string) => {
+    console.log(`[ipc] ai:context SET (${text.length} chars): "${text.slice(0, 100).replace(/\n/g, '\\n')}${text.length > 100 ? '...' : ''}"`);
     aiManager.setExtraContext(text);
     return true;
   });
@@ -73,7 +77,7 @@ export function registerIpcHandlers(
   // OCR handlers
   ipcMain.handle('ocr:capture', async () => {
     await ocrManager.captureNow();
-    // Send all accumulated screenshots to renderer (image available immediately, OCR runs in background)
+    // Send all accumulated screenshots to renderer
     const allCaptures = ocrManager.getAllCaptures();
     const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
     mainWindow.webContents.send('ocr:screenshots', imageUrls);

@@ -3,6 +3,7 @@
 #include "raw_input.h"
 #include "wasapi_capture.h"
 #include "utils.h"
+#include "screenshot.h"
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   // Window Stealth
@@ -30,6 +31,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   // Utils
   exports.Set("getWindowHandle", Napi::Function::New(env, Utils::GetWindowHandle));
+
+  // Screenshot (native BitBlt — much faster than Electron's desktopCapturer)
+  exports.Set("captureScreenNative", Napi::Function::New(env, Screenshot::CaptureScreen));
 
   return exports;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AiResponseView from './AiResponseView';
 import TranscriptView from './TranscriptView';
 import StatusBar from './StatusBar';
@@ -49,6 +49,13 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
   onExtraContextChange
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ai');
+
+  // Auto-switch to AI tab when streaming starts
+  useEffect(() => {
+    if (isStreaming) {
+      setActiveTab('ai');
+    }
+  }, [isStreaming]);
 
   return (
     <div className="overlay-panel">

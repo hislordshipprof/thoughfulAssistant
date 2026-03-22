@@ -8,6 +8,7 @@ import { registerIpcHandlers } from './ipc-handlers';
 import { AiManager } from '../services/ai/ai-manager';
 import { AudioManager } from '../services/audio/audio-manager';
 import { OcrManager } from '../services/ocr/ocr-manager';
+import { setNativeAddon } from '../services/ocr/screen-capture';
 import { ConfigStore } from '../services/config/config-store';
 
 // Disable Chromium's WGC (Windows Graphics Capture) — it conflicts with
@@ -100,6 +101,9 @@ async function createApp(): Promise<void> {
   aiManager = new AiManager();
 
   const nativeAddon = windowManager.getNativeAddon();
+  // Pass native addon to screen-capture for fast BitBlt screenshots
+  setNativeAddon(nativeAddon);
+
   audioManager = new AudioManager(nativeAddon || {
     startCapture: () => false,
     stopCapture: () => false,
@@ -109,6 +113,7 @@ async function createApp(): Promise<void> {
   ocrManager.setStealthToggle(windowManager);
 
   // Initialize AI providers
+  console.log(`[main] Initializing AI — provider: ${config.ai.provider}, openaiModel: ${config.ai.openaiModel}, anthropicModel: ${config.ai.anthropicModel}`);
   aiManager.initializeProviders(config.ai.openaiKey, config.ai.anthropicKey, config.ai.openaiModel, config.ai.anthropicModel);
   if (config.ai.provider) {
     aiManager.setActiveProvider(config.ai.provider);
@@ -214,6 +219,7 @@ async function createApp(): Promise<void> {
 
   configStore.onDidChange('ai', (newVal) => {
     if (newVal) {
+      console.log(`[main] AI config changed — provider: ${newVal.provider}, openaiModel: ${newVal.openaiModel}, anthropicModel: ${newVal.anthropicModel}`);
       if (newVal.provider) aiManager.setActiveProvider(newVal.provider);
       if (newVal.openaiModel) aiManager.setModel('openai', newVal.openaiModel);
       if (newVal.anthropicModel) aiManager.setModel('anthropic', newVal.anthropicModel);
@@ -239,35 +245,55 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       break;
 
     case 'askAi': {
+      const askStart = performance.now();
+
       // Auto-capture screen if no screenshots are queued
       if (ocrManager.getCaptureCount() === 0) {
         console.log('[main] No screenshots queued — auto-capturing screen before asking AI...');
-        // captureWithOcrPromise: screenshot is instant (thumbnail available immediately),
-        // OCR runs in parallel — we send the thumbnail to renderer right away, then await OCR
-        const ocrPromise = ocrManager.captureWithOcrPromise();
-        // Send thumbnail to renderer immediately (no waiting for OCR)
+        await ocrManager.captureScreenOnly();
+        const tCapture = performance.now();
+        console.log(`[main-timing] auto-capture: ${(tCapture - askStart).toFixed(0)}ms`);
+        // Send thumbnail to renderer immediately
         const allCaptures = ocrManager.getAllCaptures();
         const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
         mainWindow.webContents.send('ocr:screenshots', imageUrls);
-        // Now wait for OCR to finish so the AI gets the text
-        await ocrPromise;
+        const tSend = performance.now();
+        console.log(`[main-timing] IPC send thumbnails: ${(tSend - tCapture).toFixed(0)}ms`);
       }
 
       const transcript = audioManager.getTranscriptContext();
-      const ocrText = ocrManager.getCombinedText();
+      // Collect screenshot data URLs to send directly to vision model (no OCR)
+      const allCaptures = ocrManager.getAllCaptures();
+      const screenshotDataUrls = allCaptures.map(c => c.image.imageDataUrl);
       const cfg = configStore.getAll();
       const interviewMode = cfg.ai.interviewMode || 'general';
       const extraCtx = aiManager.getExtraContext();
 
-      console.log('[main] Asking AI —',
+      const tPreAi = performance.now();
+      console.log(`[main-timing] prep before AI call: ${(tPreAi - askStart).toFixed(0)}ms`);
+      console.log('[main] Asking AI (vision) —',
         `transcript: ${transcript.length} chars,`,
-        `screenshots: ${ocrManager.getCaptureCount()},`,
-        `OCR: ${ocrText.length} chars,`,
+        `screenshots: ${screenshotDataUrls.length},`,
+        `imgSizes: [${screenshotDataUrls.map(u => (u.length / 1024).toFixed(0) + 'KB').join(', ')}],`,
         `extraContext: ${extraCtx.length} chars,`,
         `mode: ${interviewMode}`
       );
+      // Log actual content previews for pipeline debugging
+      if (transcript) {
+        console.log(`[main] transcript preview: "${transcript.slice(0, 200).replace(/\n/g, '\\n')}${transcript.length > 200 ? '...' : ''}"`);
+      }
+      if (extraCtx) {
+        console.log(`[main] extraContext preview: "${extraCtx.slice(0, 200).replace(/\n/g, '\\n')}${extraCtx.length > 200 ? '...' : ''}"`);
+      } else {
+        console.log('[main] extraContext: EMPTY — no typed text will be sent to AI');
+      }
 
-      aiManager.ask(transcript, ocrText, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription);
+      aiManager.ask(transcript, screenshotDataUrls, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription);
+
+      // Clear screenshots after sending — old context is preserved in conversation history
+      ocrManager.clearCaptures();
+      mainWindow.webContents.send('ocr:screenshots', []);
+      console.log('[main] Screenshots cleared after AI submission (old context retained in history)');
 
       // Clear extra context after submitting so it doesn't re-send on next ask
       if (extraCtx) {
@@ -278,8 +304,10 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       break;
     }
 
-    case 'captureScreen':
+    case 'captureScreen': {
+      const tCap = performance.now();
       ocrManager.captureNow().then(() => {
+        console.log(`[main-timing] captureScreen total: ${(performance.now() - tCap).toFixed(0)}ms`);
         // Send all accumulated screenshot URLs to renderer
         const allCaptures = ocrManager.getAllCaptures();
         const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
@@ -287,6 +315,7 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         mainWindow.webContents.send('hotkey:action', 'captureScreen');
       });
       break;
+    }
 
     case 'toggleRecording':
       if (audioManager.isActive()) {

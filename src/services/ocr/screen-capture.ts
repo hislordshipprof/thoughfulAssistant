@@ -1,4 +1,4 @@
-import { desktopCapturer, screen, nativeImage } from 'electron';
+import { desktopCapturer, screen } from 'electron';
 
 export interface CapturedScreen {
   imageDataUrl: string;
@@ -8,12 +8,50 @@ export interface CapturedScreen {
   timestamp: number;
 }
 
-// OCR target width — 960px is plenty for text recognition and 4x faster than 1920px
-const OCR_WIDTH = 960;
+// Reference to native addon — set by setNativeAddon()
+let nativeAddon: any = null;
 
+/** Called once at startup to provide the native addon reference */
+export function setNativeAddon(addon: any): void {
+  nativeAddon = addon;
+  if (addon?.captureScreenNative) {
+    console.log('[capture] Native screenshot (BitBlt) available');
+  }
+}
+
+/**
+ * Fast native screenshot using Win32 BitBlt + GDI+ JPEG encoding.
+ * Falls back to Electron's desktopCapturer if native addon isn't available.
+ */
 export async function captureScreen(sourceId?: string, onBeforeCapture?: () => void, onAfterCapture?: () => void): Promise<CapturedScreen> {
   onBeforeCapture?.();
+
+  // Try native capture first (much faster — ~30-80ms vs ~2500ms)
+  if (nativeAddon?.captureScreenNative && !sourceId) {
+    try {
+      const t0 = performance.now();
+      const result = nativeAddon.captureScreenNative();
+      const t1 = performance.now();
+
+      console.log(`[capture-timing] NATIVE BitBlt: ${result.msBitBlt.toFixed(0)}ms, encode: ${result.msEncode.toFixed(0)}ms, base64: ${result.msBase64.toFixed(0)}ms, total: ${result.msTotal.toFixed(0)}ms (${(result.jpegSize / 1024).toFixed(0)} KB) [JS wall: ${(t1 - t0).toFixed(0)}ms]`);
+
+      onAfterCapture?.();
+      return {
+        imageDataUrl: result.dataUrl,
+        ocrDataUrl: result.dataUrl,
+        width: result.width,
+        height: result.height,
+        timestamp: Date.now()
+      };
+    } catch (err) {
+      console.warn('[capture] Native screenshot failed, falling back to desktopCapturer:', err);
+    }
+  }
+
+  // Fallback: Electron's desktopCapturer (slow ~2-3 seconds)
+  const t0 = performance.now();
   const display = screen.getPrimaryDisplay();
+
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
     thumbnailSize: {
@@ -21,8 +59,10 @@ export async function captureScreen(sourceId?: string, onBeforeCapture?: () => v
       height: display.workAreaSize.height
     }
   });
+  const t1 = performance.now();
+  console.log(`[capture-timing] desktopCapturer.getSources (fallback): ${(t1 - t0).toFixed(0)}ms`);
 
-  let source = sources[0]; // Default to primary screen
+  let source = sources[0];
   if (sourceId) {
     const found = sources.find(s => s.id === sourceId);
     if (found) source = found;
@@ -36,20 +76,15 @@ export async function captureScreen(sourceId?: string, onBeforeCapture?: () => v
   const thumbnail = source.thumbnail;
   const size = thumbnail.getSize();
 
-  // Full-res JPEG for display (smaller than PNG)
   const imageDataUrl = `data:image/jpeg;base64,${thumbnail.toJPEG(85).toString('base64')}`;
-
-  // Scaled-down version for OCR (much faster processing)
-  const scaleFactor = OCR_WIDTH / size.width;
-  const ocrHeight = Math.round(size.height * scaleFactor);
-  const ocrImage = thumbnail.resize({ width: OCR_WIDTH, height: ocrHeight });
-  const ocrDataUrl = `data:image/jpeg;base64,${ocrImage.toJPEG(90).toString('base64')}`;
+  const t2 = performance.now();
+  console.log(`[capture-timing] TOTAL (fallback): ${(t2 - t0).toFixed(0)}ms (${(imageDataUrl.length / 1024).toFixed(0)} KB)`);
 
   onAfterCapture?.();
 
   return {
     imageDataUrl,
-    ocrDataUrl,
+    ocrDataUrl: imageDataUrl,
     width: size.width,
     height: size.height,
     timestamp: Date.now()

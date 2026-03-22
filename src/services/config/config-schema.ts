@@ -10,7 +10,7 @@ export const ConfigSchema = z.object({
     provider: z.enum(['openai', 'anthropic']).default('openai'),
     openaiKey: z.string().default(''),
     anthropicKey: z.string().default(''),
-    openaiModel: z.string().default('gpt-4o'),
+    openaiModel: z.string().default('gpt-4.1'),
     anthropicModel: z.string().default('claude-sonnet-4-5-20250929'),
     interviewMode: z.enum(['leetcode', 'general']).default('general')
   }),
@@ -31,6 +31,7 @@ export const ConfigSchema = z.object({
     opacity: z.number().min(0.1).max(1).default(0.85),
     width: z.number().min(200).max(1200).default(500),
     height: z.number().min(200).max(1000).default(600),
+    fontSize: z.number().min(10).max(24).default(14),
     x: z.number().default(100),
     y: z.number().default(100),
     clickThrough: z.boolean().default(false)

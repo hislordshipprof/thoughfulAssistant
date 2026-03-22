@@ -18,6 +18,8 @@ const App: React.FC = () => {
   const [extraContext, setExtraContext] = useState('');
   const [isTypingMode, setIsTypingMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledAway = useRef(false);
+  const wasStreaming = useRef(false);
 
   // Listen for transcript updates
   useIpcEvent('onTranscriptUpdate', useCallback((entries: any[]) => {
@@ -101,11 +103,43 @@ const App: React.FC = () => {
     }, [])
   });
 
+  // Reset scroll lock when a new stream starts
+  useEffect(() => {
+    if (isStreaming && !wasStreaming.current) {
+      userScrolledAway.current = false;
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming]);
+
+  // Track user scroll — if they scroll up, stop auto-scrolling
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+      userScrolledAway.current = !atBottom;
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Auto-scroll to bottom as tokens stream in, unless user scrolled away
+  useEffect(() => {
+    if (scrollRef.current && isStreaming && !userScrolledAway.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [response, isStreaming]);
+
   // Load initial config
   useEffect(() => {
     window.electronAPI?.getConfig?.('ai').then((ai: any) => {
       if (ai?.provider) setAiProvider(ai.provider);
       if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
+    });
+    window.electronAPI?.getConfig?.('overlay').then((overlay: any) => {
+      if (overlay?.fontSize) {
+        document.documentElement.style.setProperty('--content-font-size', overlay.fontSize + 'px');
+      }
     });
     window.electronAPI?.getRecordingState?.().then((state: boolean) => {
       setIsRecording(state);

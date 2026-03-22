@@ -1,7 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const codeTheme = {
+  ...oneDark,
+  'comment': { ...oneDark['comment'], color: 'rgba(255, 255, 255, 0.55)' },
+  'prolog': { ...oneDark['prolog'], color: 'rgba(255, 255, 255, 0.55)' },
+};
 
 interface AiResponseViewProps {
   response: string;
@@ -31,13 +38,6 @@ const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label })
 };
 
 const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, error }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [response]);
 
   if (error) {
     return (
@@ -56,13 +56,14 @@ const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, 
   }
 
   return (
-    <div className="ai-response" ref={scrollRef}>
+    <div className="ai-response">
       {response && !isStreaming && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
           <CopyButton text={response} label="Copy All" />
         </div>
       )}
       <ReactMarkdown
+        remarkPlugins={[remarkBreaks]}
         components={{
           code({ node, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
@@ -74,7 +75,7 @@ const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, 
                   <CopyButton text={codeText} />
                 </div>
                 <SyntaxHighlighter
-                  style={oneDark as any}
+                  style={codeTheme as any}
                   language={match[1]}
                   PreTag="div"
                   customStyle={{
