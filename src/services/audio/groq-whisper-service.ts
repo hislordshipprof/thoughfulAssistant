@@ -39,13 +39,11 @@ export class GroqWhisperService extends EventEmitter {
     'thanks.',
     'thanks for watching.',
     'thanks for watching',
-    'you',
     'bye.',
     'bye',
     'the end.',
     'the end',
     'subscribe',
-    'so',
     'i\'m sorry.',
   ]);
 
@@ -82,6 +80,14 @@ export class GroqWhisperService extends EventEmitter {
       if (state.chunkTimer) {
         clearInterval(state.chunkTimer);
         state.chunkTimer = null;
+      }
+      // Flush remaining buffered audio before clearing
+      const remaining = state.buffer.available();
+      if (remaining >= this.MIN_SAMPLES) {
+        const samples = state.buffer.drain();
+        this.transcribeChunk(samples, source).catch(err => {
+          console.warn(`[groq-whisper:${source}] Final flush error:`, err.message);
+        });
       }
       state.buffer.clear();
     }
@@ -150,6 +156,7 @@ export class GroqWhisperService extends EventEmitter {
       if (!resp.ok) {
         const errText = await resp.text();
         console.error(`[groq-whisper:${source}] API error ${resp.status}:`, errText);
+        this.emit('error', new Error(`Groq API ${resp.status}: ${errText.slice(0, 200)}`));
         return;
       }
 

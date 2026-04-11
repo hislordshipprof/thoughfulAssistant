@@ -50,21 +50,23 @@ export class ConfigStore {
     const hotkeys = this.store.get('hotkeys');
     if (!hotkeys) return;
 
-    let changed = false;
+    let anyChanged = false;
     for (const [name, binding] of Object.entries(hotkeys)) {
+      let entryChanged = false;
       const migrated = binding.vkCodes.map((vk: number) => {
         const generic = VK_MIGRATION[vk];
         if (generic !== undefined) {
-          changed = true;
+          entryChanged = true;
           return generic;
         }
         return vk;
       });
-      if (changed) {
+      if (entryChanged) {
         (hotkeys as any)[name] = { ...binding, vkCodes: migrated };
+        anyChanged = true;
       }
     }
-    if (changed) {
+    if (anyChanged) {
       this.store.set('hotkeys', hotkeys);
       console.log('[config] Migrated hotkey VK codes to generic values');
     }
@@ -82,7 +84,11 @@ export class ConfigStore {
     const result = ConfigSchema.safeParse(fullConfig);
 
     if (result.success) {
-      this.store.set(key, value);
+      if (value === undefined) {
+        this.store.delete(key);
+      } else {
+        this.store.set(key, value);
+      }
     } else {
       throw new Error(`Invalid config for ${key}: ${result.error.message}`);
     }

@@ -6,12 +6,16 @@ interface StealthToggle {
   applyStealthMode(): void;
 }
 
+/** Max screenshots held in memory — oldest is dropped when exceeded */
+const MAX_CAPTURES = 10;
+
 export class OcrManager extends EventEmitter {
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private intervalMs: number;
   private lastCapture: CapturedScreen | null = null;
   private captures: { image: CapturedScreen; text: string }[] = [];
   private stealthToggle: StealthToggle | null = null;
+  private isCapturing = false;
 
   constructor(intervalSeconds: number = 30) {
     super();
@@ -31,6 +35,7 @@ export class OcrManager extends EventEmitter {
     if (this.intervalHandle) return;
 
     this.intervalHandle = setInterval(async () => {
+      if (this.isCapturing) return; // Skip if previous capture is still in-flight
       try {
         await this.captureScreenOnly();
       } catch (err) {
@@ -59,10 +64,18 @@ export class OcrManager extends EventEmitter {
    * Used for vision model workflow where images are sent directly to AI.
    */
   async captureScreenOnly(): Promise<void> {
-    const captured = await captureScreen();
-    this.lastCapture = captured;
-    this.captures.push({ image: captured, text: '' });
-    console.log(`[capture] Screenshot #${this.captures.length} ready (vision mode)`);
+    this.isCapturing = true;
+    try {
+      const captured = await captureScreen();
+      this.lastCapture = captured;
+      if (this.captures.length >= MAX_CAPTURES) {
+        this.captures.shift();
+      }
+      this.captures.push({ image: captured, text: '' });
+      console.log(`[capture] Screenshot #${this.captures.length} ready (vision mode)`);
+    } finally {
+      this.isCapturing = false;
+    }
   }
 
   getLastCapture(): CapturedScreen | null {

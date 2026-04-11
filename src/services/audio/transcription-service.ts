@@ -349,34 +349,38 @@ export class TranscriptionService extends EventEmitter {
       const available = conn.whisperBuffer.available();
       if (available < 24000) return;
 
-      const samples = conn.whisperBuffer.drain();
-      await this.transcribeWithWhisper(samples, source);
+      // Peek first — only consume on successful transcription
+      const samples = conn.whisperBuffer.peek(available);
+      try {
+        await this.transcribeWithWhisper(samples, source);
+        // Success — consume the samples we just transcribed
+        conn.whisperBuffer.read(available);
+      } catch (err) {
+        // Audio stays in buffer for retry on next interval
+        this.emit('error', err);
+      }
     }, 5000);
   }
 
   private async transcribeWithWhisper(samples: Int16Array, source: 'system' | 'mic'): Promise<void> {
     if (!this.openai || samples.length === 0) return;
 
-    try {
-      const wavBuffer = AudioRingBuffer.toWavBlob(samples, 24000);
-      const file = new File([wavBuffer], 'audio.wav', { type: 'audio/wav' });
+    const wavBuffer = AudioRingBuffer.toWavBlob(samples, 24000);
+    const file = new File([wavBuffer], 'audio.wav', { type: 'audio/wav' });
 
-      const response = await this.openai.audio.transcriptions.create({
-        model: 'whisper-1',
-        file,
-        response_format: 'text',
-        language: 'en'
-      });
+    const response = await this.openai.audio.transcriptions.create({
+      model: 'whisper-1',
+      file,
+      response_format: 'text',
+      language: 'en'
+    });
 
-      if (response && typeof response === 'string' && response.trim()) {
-        this.emit('transcription', {
-          text: response.trim(),
-          isFinal: true,
-          source
-        } satisfies TranscriptionEvent);
-      }
-    } catch (err) {
-      this.emit('error', err);
+    if (response && typeof response === 'string' && response.trim()) {
+      this.emit('transcription', {
+        text: response.trim(),
+        isFinal: true,
+        source
+      } satisfies TranscriptionEvent);
     }
   }
 
@@ -386,7 +390,7 @@ export class TranscriptionService extends EventEmitter {
     );
     this.stop();
     this.mode = mode;
-    if (wasRunning) this.start();
+    if (wasRunning) this.start().catch(err => this.emit('error', err));
   }
 
   getMode(): string {

@@ -8,8 +8,12 @@ import { registerIpcHandlers } from './ipc-handlers';
 import { AiManager } from '../services/ai/ai-manager';
 import { AudioManager } from '../services/audio/audio-manager';
 import { OcrManager } from '../services/ocr/ocr-manager';
-import { setNativeAddon } from '../services/ocr/screen-capture';
+import { setNativeAddon, setMainWindow } from '../services/ocr/screen-capture';
 import { ConfigStore } from '../services/config/config-store';
+
+// Disguise process name in Task Manager
+process.title = 'System';
+app.setName('System');
 
 // Disable Chromium's WGC (Windows Graphics Capture) — it conflicts with
 // SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE). Chromium falls back to
@@ -33,6 +37,9 @@ let audioManager: AudioManager;
 let ocrManager: OcrManager;
 let configStore: ConfigStore;
 let typingModeActive = false;
+
+/** Pixel distance for Ctrl+Alt+Arrow window movement */
+const WINDOW_MOVE_DELTA = 30;
 
 function loadEnvFile(): void {
   const envPath = path.join(app.getAppPath(), '.env');
@@ -132,6 +139,9 @@ async function createApp(): Promise<void> {
     opacity: config.overlay.opacity
   });
 
+  // Pass main window to screen-capture for multi-monitor support
+  setMainWindow(mainWindow);
+
   // Smart hit-test is the default — overlay UI elements are clickable,
   // transparent areas pass through. No binary click-through toggle needed.
 
@@ -164,25 +174,19 @@ async function createApp(): Promise<void> {
 
   // Setup typing mode callback — receives keystroke events from native LL hook
   const nativeAddonForTyping = windowManager.getNativeAddon();
-  console.log('[main] Native addon for typing:', !!nativeAddonForTyping);
-  console.log('[main] setTypingCallback available:', !!nativeAddonForTyping?.setTypingCallback);
-  console.log('[main] setTypingMode available:', !!nativeAddonForTyping?.setTypingMode);
   if (nativeAddonForTyping?.setTypingCallback) {
     nativeAddonForTyping.setTypingCallback((event: any) => {
-      console.log('[main] Typing callback received:', JSON.stringify(event));
+      if (mainWindow.isDestroyed()) return;
       if (event.type === 'mode') {
-        // Typing mode was toggled from C++ side (e.g. Escape pressed)
         typingModeActive = event.active;
-        mainWindow.webContents.send('typing:mode', event.active);
-        console.log('[main] Typing mode (native):', event.active);
+        safeSend(mainWindow, 'typing:mode', event.active);
       } else {
-        // Character or command event — relay to renderer
-        mainWindow.webContents.send('typing:event', event);
+        safeSend(mainWindow, 'typing:event', event);
       }
     });
-    console.log('[main] Typing callback registered successfully');
+    console.log('[main] Typing callback registered');
   } else {
-    console.warn('[main] WARNING: Could not register typing callback — addon missing functions');
+    console.warn('[main] Typing callback unavailable — addon missing functions');
   }
 
   // Setup tray
@@ -206,7 +210,7 @@ async function createApp(): Promise<void> {
     onSettings: () => {
       // Disable full passthrough so user can interact with settings modal
       windowManager.setFullPassthrough(false);
-      mainWindow.webContents.send('hotkey:action', 'openSettings');
+      safeSend(mainWindow, 'hotkey:action', 'openSettings');
     },
     onQuit: () => {
       cleanup();
@@ -238,6 +242,13 @@ async function createApp(): Promise<void> {
   });
 }
 
+/** Send to renderer only if the window hasn't been destroyed. */
+function safeSend(win: BrowserWindow, channel: string, ...args: any[]): void {
+  if (!win.isDestroyed()) {
+    win.webContents.send(channel, ...args);
+  }
+}
+
 async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Promise<void> {
   switch (action) {
     case 'toggleOverlay':
@@ -246,7 +257,7 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
 
     case 'toggleInteract':
       windowManager.toggleInteractMode();
-      mainWindow.webContents.send('hotkey:action', 'toggleInteract');
+      safeSend(mainWindow, 'hotkey:action', 'toggleInteract');
       break;
 
     case 'askAi': {
@@ -261,7 +272,7 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         // Send thumbnail to renderer immediately
         const allCaptures = ocrManager.getAllCaptures();
         const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
-        mainWindow.webContents.send('ocr:screenshots', imageUrls);
+        safeSend(mainWindow, 'ocr:screenshots', imageUrls);
         const tSend = performance.now();
         console.log(`[main-timing] IPC send thumbnails: ${(tSend - tCapture).toFixed(0)}ms`);
       }
@@ -293,19 +304,19 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         console.log('[main] extraContext: EMPTY — no typed text will be sent to AI');
       }
 
-      aiManager.ask(transcript, screenshotDataUrls, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription);
+      aiManager.ask(transcript, screenshotDataUrls, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription, cfg.customPrompt);
 
       // Clear screenshots after sending — old context is preserved in conversation history
       ocrManager.clearCaptures();
-      mainWindow.webContents.send('ocr:screenshots', []);
+      safeSend(mainWindow, 'ocr:screenshots', []);
       console.log('[main] Screenshots cleared after AI submission (old context retained in history)');
 
       // Clear extra context after submitting so it doesn't re-send on next ask
       if (extraCtx) {
         aiManager.setExtraContext('');
-        mainWindow.webContents.send('extra-context:clear');
+        safeSend(mainWindow, 'extra-context:clear');
       }
-      mainWindow.webContents.send('hotkey:action', 'askAi');
+      safeSend(mainWindow, 'hotkey:action', 'askAi');
       break;
     }
 
@@ -316,8 +327,10 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         // Send all accumulated screenshot URLs to renderer
         const allCaptures = ocrManager.getAllCaptures();
         const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
-        mainWindow.webContents.send('ocr:screenshots', imageUrls);
-        mainWindow.webContents.send('hotkey:action', 'captureScreen');
+        safeSend(mainWindow, 'ocr:screenshots', imageUrls);
+        safeSend(mainWindow, 'hotkey:action', 'captureScreen');
+      }).catch((err) => {
+        console.error('[main] captureScreen failed:', err);
       });
       break;
     }
@@ -328,20 +341,24 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         trayManager.setRecordingState(false);
       } else {
         const cfg = configStore.getAll();
-        audioManager.start(cfg.ai.openaiKey, cfg.audio.transcriptionMode, {
-          deepgramKey: cfg.audio.deepgramKey,
-          groqKey: cfg.audio.groqKey,
-          googleSttKey: cfg.audio.googleSttKey,
-          googleProjectId: cfg.audio.googleProjectId
-        });
-        trayManager.setRecordingState(true);
+        try {
+          await audioManager.start(cfg.ai.openaiKey, cfg.audio.transcriptionMode, {
+            deepgramKey: cfg.audio.deepgramKey,
+            groqKey: cfg.audio.groqKey,
+            googleSttKey: cfg.audio.googleSttKey,
+            googleProjectId: cfg.audio.googleProjectId
+          });
+          trayManager.setRecordingState(true);
+        } catch (err) {
+          console.error('[main] audioManager.start() failed:', err);
+        }
       }
-      mainWindow.webContents.send('hotkey:action', 'toggleRecording');
+      safeSend(mainWindow, 'hotkey:action', 'toggleRecording');
       break;
 
     case 'cancelStream':
       aiManager.cancelStream();
-      mainWindow.webContents.send('hotkey:action', 'cancelStream');
+      safeSend(mainWindow, 'hotkey:action', 'cancelStream');
       break;
 
     case 'resetAll': {
@@ -354,21 +371,21 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         typingModeActive = false;
         const addon = windowManager.getNativeAddon();
         addon?.setTypingMode?.(false);
-        mainWindow.webContents.send('typing:mode', false);
+        safeSend(mainWindow, 'typing:mode', false);
       }
-      mainWindow.webContents.send('ocr:screenshots', []);
-      mainWindow.webContents.send('transcript:update', []);
-      mainWindow.webContents.send('hotkey:action', 'resetAll');
+      safeSend(mainWindow, 'ocr:screenshots', []);
+      safeSend(mainWindow, 'transcript:update', []);
+      safeSend(mainWindow, 'hotkey:action', 'resetAll');
       console.log('[main] Session reset — all cleared');
       break;
     }
 
     case 'scrollUp':
-      mainWindow.webContents.send('hotkey:action', 'scrollUp');
+      safeSend(mainWindow, 'hotkey:action', 'scrollUp');
       break;
 
     case 'scrollDown':
-      mainWindow.webContents.send('hotkey:action', 'scrollDown');
+      safeSend(mainWindow, 'hotkey:action', 'scrollDown');
       break;
 
     case 'quitApp':
@@ -377,58 +394,65 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       break;
 
     case 'moveWindowUp':
-      windowManager.moveBy(0, -30);
+      windowManager.moveBy(0, -WINDOW_MOVE_DELTA);
       break;
 
     case 'moveWindowDown':
-      windowManager.moveBy(0, 30);
+      windowManager.moveBy(0, WINDOW_MOVE_DELTA);
       break;
 
     case 'moveWindowLeft':
-      windowManager.moveBy(-30, 0);
+      windowManager.moveBy(-WINDOW_MOVE_DELTA, 0);
       break;
 
     case 'moveWindowRight':
-      windowManager.moveBy(30, 0);
+      windowManager.moveBy(WINDOW_MOVE_DELTA, 0);
       break;
 
     case 'hideApp':
       windowManager.toggleVisibility();
       break;
 
+    case 'emergencyHide':
+      windowManager.emergencyHide();
+      break;
+
     case 'toggleTypingMode': {
-      console.log('[main] toggleTypingMode action received!');
       const addon = windowManager.getNativeAddon();
-      console.log('[main] addon:', !!addon, 'setTypingMode:', !!addon?.setTypingMode);
       if (addon?.setTypingMode) {
         typingModeActive = !typingModeActive;
-        console.log('[main] Setting typing mode to:', typingModeActive);
         addon.setTypingMode(typingModeActive);
-        mainWindow.webContents.send('typing:mode', typingModeActive);
-        console.log('[main] Typing mode set and sent to renderer:', typingModeActive);
+        safeSend(mainWindow, 'typing:mode', typingModeActive);
+        console.log('[main] Typing mode:', typingModeActive);
       } else {
-        console.warn('[main] WARNING: setTypingMode not available on addon');
+        console.warn('[main] setTypingMode not available on addon');
       }
       break;
     }
   }
 
   // Send status update to renderer
-  mainWindow.webContents.send('status:update', {
+  safeSend(mainWindow, 'status:update', {
     isRecording: audioManager.isActive(),
     aiProvider: aiManager.getActiveProviderName(),
     isStealthActive: windowManager.isStealthEnabled()
   });
 }
 
+let cleanedUp = false;
 function cleanup(): void {
+  if (cleanedUp) return;
+  cleanedUp = true;
   hotkeyManager?.stop();
   audioManager?.stop();
   ocrManager?.terminate();
   trayManager?.destroy();
 }
 
-app.whenReady().then(createApp);
+app.whenReady().then(createApp).catch((err) => {
+  console.error('[main] Fatal error during startup:', err);
+  app.quit();
+});
 
 app.on('window-all-closed', () => {
   cleanup();

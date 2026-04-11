@@ -5,9 +5,12 @@ import { useStreamingResponse } from './hooks/useStreamingResponse';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useIpcEvent } from './hooks/useIpc';
 
+/** Max characters for typed extra context (prevent unbounded growth) */
+const MAX_EXTRA_CONTEXT_CHARS = 50000;
+
 const App: React.FC = () => {
   const [interviewMode, setInterviewMode] = useState<string>('general');
-  const { response, isStreaming, error, reset } = useStreamingResponse(interviewMode === 'leetcode');
+  const { response, isStreaming, error, reset } = useStreamingResponse(true);
   const [transcriptEntries, setTranscriptEntries] = useState<any[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -51,6 +54,7 @@ const App: React.FC = () => {
   useIpcEvent('onTypingEvent', useCallback((event: any) => {
     if (event.type === 'char') {
       setExtraContext(prev => {
+        if (prev.length >= MAX_EXTRA_CONTEXT_CHARS) return prev;
         const newVal = prev + event.char;
         window.electronAPI?.setExtraContext?.(newVal);
         return newVal;
@@ -64,6 +68,7 @@ const App: React.FC = () => {
         });
       } else if (event.command === 'enter') {
         setExtraContext(prev => {
+          if (prev.length >= MAX_EXTRA_CONTEXT_CHARS) return prev;
           const newVal = prev + '\n';
           window.electronAPI?.setExtraContext?.(newVal);
           return newVal;
@@ -85,7 +90,7 @@ const App: React.FC = () => {
       setSettingsOpen(true);
     }, []),
     toggleRecording: useCallback(() => {
-      setIsRecording(prev => !prev);
+      // State will be updated via onStatusUpdate from main process
     }, []),
     resetAll: useCallback(() => {
       reset();
@@ -135,15 +140,15 @@ const App: React.FC = () => {
     window.electronAPI?.getConfig?.('ai').then((ai: any) => {
       if (ai?.provider) setAiProvider(ai.provider);
       if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
-    });
+    }).catch((err: unknown) => console.warn('[app] Failed to load AI config:', err));
     window.electronAPI?.getConfig?.('overlay').then((overlay: any) => {
       if (overlay?.fontSize) {
         document.documentElement.style.setProperty('--content-font-size', overlay.fontSize + 'px');
       }
-    });
+    }).catch((err: unknown) => console.warn('[app] Failed to load overlay config:', err));
     window.electronAPI?.getRecordingState?.().then((state: boolean) => {
       setIsRecording(state);
-    });
+    }).catch((err: unknown) => console.warn('[app] Failed to load recording state:', err));
   }, []);
 
   const handleToggleRecording = useCallback(async () => {
@@ -152,13 +157,17 @@ const App: React.FC = () => {
   }, []);
 
   const handleAskAi = useCallback(async () => {
-    const transcript = ''; // Main process will use its own stores
     const ocrText = await window.electronAPI?.getLastOcrText() || '';
-    await window.electronAPI?.askAi(transcript, ocrText);
+    await window.electronAPI?.askAi('', ocrText);
   }, []);
 
   const handleCaptureScreen = useCallback(async () => {
     await window.electronAPI?.captureScreen();
+  }, []);
+
+  const handleToggleStealth = useCallback(async () => {
+    const newState = await window.electronAPI?.toggleStealth();
+    setIsStealthActive(newState);
   }, []);
 
   const handleExtraContextChange = useCallback((text: string) => {
@@ -191,6 +200,7 @@ const App: React.FC = () => {
           setScreenshots([]);
         }}
         onExtraContextChange={handleExtraContextChange}
+        onToggleStealth={handleToggleStealth}
       />
       <SettingsModal
         isOpen={settingsOpen}

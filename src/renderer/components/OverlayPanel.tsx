@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import AiResponseView from './AiResponseView';
 import TranscriptView from './TranscriptView';
 import StatusBar from './StatusBar';
@@ -23,6 +23,7 @@ interface OverlayPanelProps {
   onRemoveScreenshot: (index: number) => void;
   onClearScreenshots: () => void;
   onExtraContextChange: (text: string) => void;
+  onToggleStealth: () => void;
 }
 
 type Tab = 'ai' | 'transcript';
@@ -46,9 +47,52 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
   onCaptureScreen,
   onRemoveScreenshot,
   onClearScreenshots,
-  onExtraContextChange
+  onExtraContextChange,
+  onToggleStealth
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ai');
+  const dragState = useRef<{ startX: number; startY: number } | null>(null);
+
+  // Custom window drag — mousedown on header, mousemove/mouseup on document
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    // Don't drag from buttons in the controls area
+    if ((e.target as HTMLElement).closest('.overlay-header-controls')) return;
+    dragState.current = { startX: e.screenX, startY: e.screenY };
+    (window as any).electronAPI?.setDragging?.(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState.current) return;
+      const dx = e.screenX - dragState.current.startX;
+      const dy = e.screenY - dragState.current.startY;
+      if (dx !== 0 || dy !== 0) {
+        (window as any).electronAPI?.moveWindowBy?.(dx, dy);
+        dragState.current.startX = e.screenX;
+        dragState.current.startY = e.screenY;
+      }
+    };
+    const handleMouseUp = () => {
+      if (dragState.current) {
+        dragState.current = null;
+        (window as any).electronAPI?.setDragging?.(false);
+      }
+    };
+    const handleBlur = () => {
+      if (dragState.current) {
+        dragState.current = null;
+        (window as any).electronAPI?.setDragging?.(false);
+      }
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   // Auto-switch to AI tab when streaming starts
   useEffect(() => {
@@ -87,7 +131,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
       )}
 
       {/* Draggable header */}
-      <div className="overlay-header">
+      <div className="overlay-header" onMouseDown={handleDragStart}>
         <span className="overlay-header-title">Interview Assistant</span>
         <div className="overlay-header-controls">
           <button
@@ -179,6 +223,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
         aiProvider={aiProvider}
         isStealthActive={isStealthActive}
         isPassthrough={isPassthrough}
+        onToggleStealth={onToggleStealth}
       />
     </div>
   );

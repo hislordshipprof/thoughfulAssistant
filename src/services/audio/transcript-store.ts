@@ -99,14 +99,26 @@ export class TranscriptStore extends EventEmitter {
     return this.entries.slice(-count);
   }
 
-  /** Get transcript as formatted text for AI context */
-  toContext(maxEntries: number = 50): string {
+  /** Get transcript as formatted text for AI context.
+   *  Entries are already time-pruned (15 min window), so maxChars is a safety net.
+   *  60K chars ≈ 15K tokens — comfortably fits alongside history in any model. */
+  toContext(maxEntries: number = 50, maxChars: number = 60000): string {
     const recent = this.getRecent(maxEntries);
-    return recent.map(e => {
+    const lines: string[] = [];
+    let totalChars = 0;
+
+    // Build from newest to oldest, then reverse, so we keep the most recent entries
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const e = recent[i];
       const label = e.source === 'system' ? 'Interviewer' : 'You';
       const time = new Date(e.timestamp).toLocaleTimeString();
-      return `[${time}] ${label}: ${e.text}`;
-    }).join('\n');
+      const line = `[${time}] ${label}: ${e.text}`;
+      if (totalChars + line.length > maxChars && lines.length > 0) break;
+      lines.unshift(line);
+      totalChars += line.length + 1; // +1 for newline
+    }
+
+    return lines.join('\n');
   }
 
   clear(): void {

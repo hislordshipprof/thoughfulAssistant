@@ -71,11 +71,19 @@ export class AnthropicProvider implements AiProvider {
       const tApiStart = performance.now();
       console.log(`[anthropic-timing] sending request to ${this.model}...`);
 
+      // Send system prompt as content block with cache_control for prompt caching.
+      // Anthropic caches the system prompt prefix server-side — on cache hits,
+      // time-to-first-token drops by up to 85%. Min 1024 tokens for Sonnet 4.5.
+      const systemText = systemMsg ? getTextContent(systemMsg.content) : '';
+      const systemParam = systemText
+        ? [{ type: 'text' as const, text: systemText, cache_control: { type: 'ephemeral' as const } }]
+        : [];
+
       const stream = this.client.messages.stream(
         {
           model: this.model,
           max_tokens: 4096,
-          system: systemMsg ? getTextContent(systemMsg.content) : '',
+          system: systemParam,
           messages: chatMessages as any
         },
         { signal: this.abortController.signal }
@@ -92,7 +100,11 @@ export class AnthropicProvider implements AiProvider {
         }
       }
 
-      console.log(`[anthropic-timing] stream complete: ${(performance.now() - tApiStart).toFixed(0)}ms`);
+      const elapsed = (performance.now() - tApiStart).toFixed(0);
+      // Log cache performance — cache_read_input_tokens > 0 means cache hit
+      const finalMsg = await stream.finalMessage();
+      const usage = finalMsg.usage as any;
+      console.log(`[anthropic-timing] stream complete: ${elapsed}ms | tokens: in=${usage.input_tokens} out=${usage.output_tokens} cache_create=${usage.cache_creation_input_tokens ?? 0} cache_read=${usage.cache_read_input_tokens ?? 0}`);
       onEvent({ type: 'done', content: '' });
     } catch (err: any) {
       if (err.name === 'AbortError') return;

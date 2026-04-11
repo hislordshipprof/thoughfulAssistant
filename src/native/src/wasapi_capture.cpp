@@ -212,9 +212,17 @@ static void CaptureThreadProc(Napi::ThreadSafeFunction tsfn, bool isLoopback) {
           }
 
           if (!resampled.empty()) {
-            auto* chunk = new AudioChunk{
-              std::move(resampled), 24000, 1, isLoopback
-            };
+            AudioChunk* chunk = nullptr;
+            try {
+              chunk = new AudioChunk{
+                std::move(resampled), 24000, 1, isLoopback
+              };
+            } catch (const std::bad_alloc&) {
+              // OOM — skip this chunk rather than crashing the thread
+              captureClient->ReleaseBuffer(numFrames);
+              hr = captureClient->GetNextPacketSize(&packetLength);
+              continue;
+            }
 
             tsfn.NonBlockingCall(chunk, [](Napi::Env env, Napi::Function callback, AudioChunk* chunk) {
               auto buffer = Napi::Buffer<int16_t>::Copy(

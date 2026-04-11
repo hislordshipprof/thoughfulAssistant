@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useIpc } from '../hooks/useIpc';
 
 interface SettingsModalProps {
@@ -36,22 +36,77 @@ interface Settings {
   };
   resume: string;
   jobDescription: string;
+  customPrompt: string;
 }
+
+const OPACITY_DEBOUNCE_MS = 50;
+
+const HOTKEYS: [string, string][] = [
+  ['Ctrl+H', 'Hide app'],
+  ['Ctrl+Shift+H', 'Toggle overlay'],
+  ['Ctrl+Shift+A', 'Ask AI'],
+  ['Ctrl+Shift+S', 'Capture screen'],
+  ['Ctrl+Shift+R', 'Toggle recording'],
+  ['Ctrl+Shift+I', 'Toggle interact mode'],
+  ['Ctrl+Shift+N', 'New conversation'],
+  ['Ctrl+Shift+Up/Down', 'Scroll content'],
+  ['Ctrl+Shift+Q', 'Quit app'],
+  ['Ctrl+Shift+W', 'Toggle typing mode'],
+  ['Ctrl+Alt+Arrows', 'Move window'],
+  ['Escape', 'Cancel AI / Exit typing'],
+];
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const api = useIpc();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [jdUploading, setJdUploading] = useState(false);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [jdFileName, setJdFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const opacityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFileUpload = async (purpose: 'resume' | 'jobDescription') => {
+    const setUploading = purpose === 'resume' ? setResumeUploading : setJdUploading;
+    const setFileName = purpose === 'resume' ? setResumeFileName : setJdFileName;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const result = await (window as any).electronAPI?.pickAndExtractFile?.(purpose);
+      if (!result) return; // dialog canceled
+      if (result.success) {
+        updateField(purpose, result.text);
+        setFileName(result.fileName);
+      } else {
+        setUploadError(`Failed to read ${result.fileName}: ${result.error}`);
+        console.error(`File extraction failed: ${result.error}`);
+      }
+    } catch (err) {
+      setUploadError('File upload failed unexpectedly');
+      console.error('File upload error:', err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
+    let cancelled = false;
     if (isOpen) {
-      api.getConfig().then(setSettings);
-      // Enable keyboard focus so user can type in input fields
+      api.getConfig()
+        .then((cfg) => { if (!cancelled) setSettings(cfg); })
+        .catch((err: any) => {
+          if (!cancelled) {
+            console.error('[settings] Failed to load config:', err);
+            setSaveError('Failed to load settings');
+          }
+        });
       (window as any).electronAPI?.setFocusable?.(true);
     } else {
-      // Restore no-focus mode when settings closes
       (window as any).electronAPI?.setFocusable?.(false);
     }
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   if (!isOpen || !settings) return null;
@@ -73,6 +128,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const save = async () => {
     if (!settings) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await api.setConfig('ai', settings.ai);
       await api.setConfig('audio', settings.audio);
@@ -80,9 +136,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       await api.setConfig('overlay', settings.overlay);
       await api.setConfig('resume', settings.resume);
       await api.setConfig('jobDescription', settings.jobDescription);
+      await api.setConfig('customPrompt', settings.customPrompt);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || 'Unknown error';
       console.error('Failed to save settings:', err);
+      setSaveError(`Failed to save: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -98,6 +157,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       <div className="settings-modal">
         <div className="settings-title">Settings</div>
 
+        {/* ── AI Provider ── */}
         <div className="settings-section">
           <div className="settings-section-title">AI Provider</div>
           <div className="settings-field">
@@ -121,6 +181,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             >
               <option value="general">General (Default)</option>
               <option value="leetcode">LeetCode / Coding Interview</option>
+              <option value="system_design">System Design Interview</option>
+              <option value="code_modification">Code Modification Interview</option>
             </select>
           </div>
           <div className="settings-field">
@@ -159,8 +221,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.groqModel}
               onChange={e => update('ai', 'groqModel', e.target.value)}
             >
-              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision — 750 T/s)</option>
-              <option value="openai/gpt-oss-120b">GPT-OSS 120B (Reasoning — 500 T/s)</option>
+              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision)</option>
+              <option value="openai/gpt-oss-120b">GPT-OSS 120B (Reasoning)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -195,6 +257,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {/* ── Speech-to-Text ── */}
         <div className="settings-section">
           <div className="settings-section-title">Speech-to-Text</div>
           <div className="settings-field">
@@ -264,10 +327,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           )}
         </div>
 
+        {/* ── Screen Capture ── */}
         <div className="settings-section">
           <div className="settings-section-title">Screen Capture</div>
           <div className="settings-field">
-            <label className="settings-label">OCR Interval (seconds)</label>
+            <label className="settings-label">Capture Interval (seconds)</label>
             <input
               className="settings-input"
               type="number"
@@ -279,11 +343,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {/* ── Overlay ── */}
         <div className="settings-section">
           <div className="settings-section-title">Overlay</div>
           <div className="settings-field">
             <label className="settings-label">Opacity ({Math.round(settings.overlay.opacity * 100)}%)</label>
             <input
+              className="settings-range"
               type="range"
               min={10}
               max={100}
@@ -291,14 +357,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               onChange={e => {
                 const val = parseInt(e.target.value) / 100;
                 update('overlay', 'opacity', val);
-                api.setOpacity(val);
+                if (opacityTimerRef.current) clearTimeout(opacityTimerRef.current);
+                opacityTimerRef.current = setTimeout(() => api.setOpacity(val), OPACITY_DEBOUNCE_MS);
               }}
-              style={{ width: '100%' }}
             />
           </div>
           <div className="settings-field">
             <label className="settings-label">Font Size ({settings.overlay.fontSize}px)</label>
             <input
+              className="settings-range"
               type="range"
               min={10}
               max={24}
@@ -308,7 +375,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 update('overlay', 'fontSize', val);
                 document.documentElement.style.setProperty('--content-font-size', val + 'px');
               }}
-              style={{ width: '100%' }}
             />
           </div>
           <div className="settings-field">
@@ -343,51 +409,102 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {/* ── My Profile ── */}
         <div className="settings-section">
           <div className="settings-section-title">My Profile</div>
+          {uploadError && (
+            <div className="settings-error-banner">{uploadError}</div>
+          )}
           <div className="settings-field">
-            <label className="settings-label">Resume / Background</label>
+            <div className="settings-upload-row">
+              <label className="settings-label" style={{ margin: 0 }}>Resume / Background</label>
+              <button
+                className="settings-btn settings-btn-secondary settings-btn-sm"
+                onClick={() => handleFileUpload('resume')}
+                disabled={resumeUploading}
+              >
+                {resumeUploading ? 'Reading...' : 'Upload File'}
+              </button>
+            </div>
+            {resumeFileName && (
+              <div className="settings-file-info">
+                <span>{resumeFileName}</span>
+                <span className="settings-file-info-secondary">({settings.resume.length.toLocaleString()} chars)</span>
+              </div>
+            )}
             <textarea
               className="settings-input"
-              rows={6}
+              rows={5}
               value={settings.resume}
-              onChange={e => updateField('resume', e.target.value)}
-              placeholder="Paste your resume or background info here. This will be used as context so the AI can answer questions about you."
-              style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5 }}
+              onChange={e => { updateField('resume', e.target.value); if (!e.target.value) setResumeFileName(null); }}
+              placeholder="Paste your resume here or click Upload File (.txt, .pdf, .docx). This will be used as context so the AI can answer questions about you."
+              style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
             />
           </div>
           <div className="settings-field">
-            <label className="settings-label">Job Description</label>
+            <div className="settings-upload-row">
+              <label className="settings-label" style={{ margin: 0 }}>Job Description</label>
+              <button
+                className="settings-btn settings-btn-secondary settings-btn-sm"
+                onClick={() => handleFileUpload('jobDescription')}
+                disabled={jdUploading}
+              >
+                {jdUploading ? 'Reading...' : 'Upload File'}
+              </button>
+            </div>
+            {jdFileName && (
+              <div className="settings-file-info">
+                <span>{jdFileName}</span>
+                <span className="settings-file-info-secondary">({settings.jobDescription.length.toLocaleString()} chars)</span>
+              </div>
+            )}
             <textarea
               className="settings-input"
-              rows={6}
+              rows={5}
               value={settings.jobDescription}
-              onChange={e => updateField('jobDescription', e.target.value)}
-              placeholder="Paste the job description here. Responses will be tailored to align your experience with this role."
-              style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5 }}
+              onChange={e => { updateField('jobDescription', e.target.value); if (!e.target.value) setJdFileName(null); }}
+              placeholder="Paste the job description here or click Upload File (.txt, .pdf, .docx). Responses will be tailored to align your experience with this role."
+              style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
             />
           </div>
         </div>
 
+        {/* ── Custom Instructions ── */}
+        <div className="settings-section">
+          <div className="settings-section-title">Custom Instructions</div>
+          <div className="settings-description">
+            Tell the AI how it should behave and respond. These instructions take priority over built-in rules and apply to every response.
+          </div>
+          <div className="settings-field">
+            <textarea
+              className="settings-input"
+              rows={4}
+              value={settings.customPrompt || ''}
+              onChange={e => setSettings(prev => prev ? { ...prev, customPrompt: e.target.value } : prev)}
+              placeholder={'Examples:\n- Always respond in a casual, conversational tone.\n- Keep behavioral answers under 60 seconds spoken.\n- Prefer Python over JavaScript for code examples.'}
+              style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+            />
+          </div>
+        </div>
+
+        {/* ── Hotkeys ── */}
         <div className="settings-section">
           <div className="settings-section-title">Hotkeys</div>
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-            <div>Ctrl+H — Hide app</div>
-            <div>Ctrl+Shift+H — Toggle overlay</div>
-            <div>Ctrl+Shift+A — Ask AI</div>
-            <div>Ctrl+Shift+S — Capture screen</div>
-            <div>Ctrl+Shift+R — Toggle recording</div>
-            <div>Ctrl+Shift+I — Toggle interact mode</div>
-            <div>Ctrl+Shift+N — Reset / New conversation</div>
-            <div>Ctrl+Shift+Up/Down — Scroll content</div>
-            <div>Ctrl+Shift+Q — Quit app</div>
-            <div>Ctrl+Shift+W — Toggle typing mode</div>
-            <div>Ctrl+Alt+Arrows — Move window</div>
-            <div>Escape — Cancel AI stream / Exit typing</div>
+          <div className="settings-hotkeys">
+            {HOTKEYS.map(([key, desc]) => (
+              <React.Fragment key={key}>
+                <span className="hotkey-key">{key}</span>
+                <span className="hotkey-desc">{desc}</span>
+              </React.Fragment>
+            ))}
           </div>
         </div>
 
+        {/* ── Footer ── */}
         <div className="settings-footer">
+          {saveError && (
+            <div className="settings-error-banner" style={{ flex: 1 }}>{saveError}</div>
+          )}
           <button className="settings-btn settings-btn-secondary" onClick={onClose}>
             Cancel
           </button>

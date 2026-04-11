@@ -62,12 +62,7 @@ export class AudioRingBuffer {
 
   /** Convert Int16 samples to base64-encoded PCM bytes */
   static toBase64(samples: Int16Array): string {
-    const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength).toString('base64');
   }
 
   /** Convert Int16 samples to WAV Blob */

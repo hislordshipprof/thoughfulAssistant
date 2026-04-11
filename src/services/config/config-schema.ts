@@ -14,7 +14,7 @@ export const ConfigSchema = z.object({
     openaiModel: z.string().default('gpt-4.1'),
     anthropicModel: z.string().default('claude-sonnet-4-5-20250929'),
     groqModel: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
-    interviewMode: z.enum(['leetcode', 'general']).default('general')
+    interviewMode: z.enum(['leetcode', 'general', 'system_design', 'code_modification']).default('general')
   }),
   audio: z.object({
     transcriptionMode: z.enum(['deepgram', 'realtime', 'groq-whisper', 'whisper', 'google-stt']).default('deepgram'),
@@ -34,8 +34,8 @@ export const ConfigSchema = z.object({
     width: z.number().min(200).max(1200).default(500),
     height: z.number().min(200).max(1000).default(600),
     fontSize: z.number().min(10).max(24).default(14),
-    x: z.number().default(100),
-    y: z.number().default(100),
+    x: z.number().min(-3000).max(6000).default(100),
+    y: z.number().min(-3000).max(6000).default(100),
     clickThrough: z.boolean().default(false)
   }),
   hotkeys: z.object({
@@ -54,10 +54,12 @@ export const ConfigSchema = z.object({
     moveWindowLeft: HotkeySchema.default({ vkCodes: [0x11, 0x12, 0x25], label: 'Ctrl+Alt+Left' }),      // Ctrl+Alt+Left
     moveWindowRight: HotkeySchema.default({ vkCodes: [0x11, 0x12, 0x27], label: 'Ctrl+Alt+Right' }),    // Ctrl+Alt+Right
     hideApp: HotkeySchema.default({ vkCodes: [0x11, 0x48], label: 'Ctrl+H' }),                          // Ctrl+H
-    toggleTypingMode: HotkeySchema.default({ vkCodes: [0x11, 0x10, 0x57], label: 'Ctrl+Shift+W' })    // Ctrl+Shift+W
+    toggleTypingMode: HotkeySchema.default({ vkCodes: [0x11, 0x10, 0x57], label: 'Ctrl+Shift+W' }),   // Ctrl+Shift+W
+    emergencyHide: HotkeySchema.default({ vkCodes: [0x11, 0x10, 0x45], label: 'Ctrl+Shift+E' })      // Ctrl+Shift+E
   }),
   resume: z.string().default(''),
-  jobDescription: z.string().default('')
+  jobDescription: z.string().default(''),
+  customPrompt: z.string().default('')
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

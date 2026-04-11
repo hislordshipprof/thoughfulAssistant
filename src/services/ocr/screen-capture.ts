@@ -1,4 +1,4 @@
-import { desktopCapturer, screen } from 'electron';
+import { BrowserWindow, desktopCapturer, screen } from 'electron';
 
 export interface CapturedScreen {
   imageDataUrl: string;
@@ -10,6 +10,8 @@ export interface CapturedScreen {
 
 // Reference to native addon — set by setNativeAddon()
 let nativeAddon: any = null;
+// Reference to main window — used to determine which monitor to capture
+let mainWindow: BrowserWindow | null = null;
 
 /** Called once at startup to provide the native addon reference */
 export function setNativeAddon(addon: any): void {
@@ -17,6 +19,12 @@ export function setNativeAddon(addon: any): void {
   if (addon?.captureScreenNative) {
     console.log('[capture] Native screenshot (BitBlt) available');
   }
+}
+
+/** Called once at startup to provide the main window reference for multi-monitor capture */
+export function setMainWindow(win: BrowserWindow): void {
+  mainWindow = win;
+  console.log('[capture] Main window reference set for multi-monitor capture');
 }
 
 /**
@@ -30,7 +38,11 @@ export async function captureScreen(sourceId?: string, onBeforeCapture?: () => v
   if (nativeAddon?.captureScreenNative && !sourceId) {
     try {
       const t0 = performance.now();
-      const result = nativeAddon.captureScreenNative();
+      // Pass window handle so native code captures the monitor the overlay is on
+      const hwndBuf = mainWindow?.getNativeWindowHandle();
+      const result = hwndBuf
+        ? nativeAddon.captureScreenNative(hwndBuf)
+        : nativeAddon.captureScreenNative();
       const t1 = performance.now();
 
       console.log(`[capture-timing] NATIVE BitBlt: ${result.msBitBlt.toFixed(0)}ms, encode: ${result.msEncode.toFixed(0)}ms, base64: ${result.msBase64.toFixed(0)}ms, total: ${result.msTotal.toFixed(0)}ms (${(result.jpegSize / 1024).toFixed(0)} KB) [JS wall: ${(t1 - t0).toFixed(0)}ms]`);
@@ -50,15 +62,31 @@ export async function captureScreen(sourceId?: string, onBeforeCapture?: () => v
 
   // Fallback: Electron's desktopCapturer (slow ~2-3 seconds)
   const t0 = performance.now();
-  const display = screen.getPrimaryDisplay();
 
-  const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
-    thumbnailSize: {
-      width: display.workAreaSize.width,
-      height: display.workAreaSize.height
-    }
-  });
+  // Find the display the overlay window is currently on
+  let display;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const bounds = mainWindow.getBounds();
+    const centerX = bounds.x + Math.round(bounds.width / 2);
+    const centerY = bounds.y + Math.round(bounds.height / 2);
+    display = screen.getDisplayNearestPoint({ x: centerX, y: centerY });
+  } else {
+    display = screen.getPrimaryDisplay();
+  }
+
+  let sources;
+  try {
+    sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: {
+        width: display.size.width,
+        height: display.size.height
+      }
+    });
+  } catch (err) {
+    onAfterCapture?.();
+    throw err;
+  }
   const t1 = performance.now();
   console.log(`[capture-timing] desktopCapturer.getSources (fallback): ${(t1 - t0).toFixed(0)}ms`);
 
@@ -66,6 +94,10 @@ export async function captureScreen(sourceId?: string, onBeforeCapture?: () => v
   if (sourceId) {
     const found = sources.find(s => s.id === sourceId);
     if (found) source = found;
+  } else {
+    // Match source to the display the overlay is on
+    const displayMatch = sources.find(s => s.display_id === String(display.id));
+    if (displayMatch) source = displayMatch;
   }
 
   if (!source) {

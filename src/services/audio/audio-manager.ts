@@ -22,8 +22,15 @@ interface SttProvider extends EventEmitter {
   getMode(): string;
 }
 
-// Time gap (ms) — if no new transcription from same source within this window, next one starts a new entry
+/** Time (ms) between transcriptions before starting a new speaker turn */
 const TURN_GAP_MS = 1500;
+
+/** Audio buffer capacity: sample rate * seconds of audio to retain */
+const AUDIO_SAMPLE_RATE = 24000;
+const BUFFER_DURATION_SECONDS = 60;
+
+/** Max time (ms) to wait for STT provider to connect before giving up */
+const STT_START_TIMEOUT_MS = 15000;
 
 export class AudioManager extends EventEmitter {
   private native: NativeAddon;
@@ -46,8 +53,8 @@ export class AudioManager extends EventEmitter {
     super();
     this.native = native;
     this.transcriptStore = new TranscriptStore(15);
-    this.loopbackBuffer = new AudioRingBuffer(24000 * 60);  // 1 min at 24kHz
-    this.micBuffer = new AudioRingBuffer(24000 * 60);
+    this.loopbackBuffer = new AudioRingBuffer(AUDIO_SAMPLE_RATE * BUFFER_DURATION_SECONDS);
+    this.micBuffer = new AudioRingBuffer(AUDIO_SAMPLE_RATE * BUFFER_DURATION_SECONDS);
   }
 
   async start(
@@ -96,7 +103,20 @@ export class AudioManager extends EventEmitter {
     }
     console.log('[audio] Native WASAPI capture started');
 
-    await this.sttProvider.start();
+    try {
+      await Promise.race([
+        this.sttProvider.start(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('STT provider start timed out')), STT_START_TIMEOUT_MS)
+        )
+      ]);
+    } catch (err) {
+      // STT failed to connect — stop native capture so we don't leak audio threads
+      this.native.stopCapture();
+      this.sttProvider?.stop();
+      this.sttProvider = null;
+      throw err;
+    }
     this.isRunning = true;
     console.log('[audio] Audio pipeline fully started');
     this.emit('started');
@@ -200,6 +220,7 @@ export class AudioManager extends EventEmitter {
     this.partialIds = { system: null, mic: null };
     this.accumulationIds = { system: null, mic: null };
     this.lastTranscriptionSource = null;
+    this.micChunkCount = 0;
     this.emit('stopped');
   }
 

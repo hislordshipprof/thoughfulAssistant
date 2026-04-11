@@ -56,6 +56,7 @@ const electronAPI = {
   setConfig: (key: string, value: any) => ipcRenderer.invoke('config:set', key, value),
 
   // Window
+  toggleStealth: () => ipcRenderer.invoke('window:toggleStealth'),
   setClickThrough: (enable: boolean) => ipcRenderer.invoke('window:clickThrough', enable),
   setOpacity: (opacity: number) => ipcRenderer.invoke('window:opacity', opacity),
   setFocusable: (enable: boolean) => ipcRenderer.invoke('window:focusable', enable),
@@ -68,6 +69,9 @@ const electronAPI = {
 
   // Clipboard — write without stealing focus
   copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
+
+  // File upload — pick file and extract text (for resume/JD upload)
+  pickAndExtractFile: (purpose: string) => ipcRenderer.invoke('file:pick-and-extract', purpose),
 
   // Status
   onStatusUpdate: (callback: (status: any) => void) => {
@@ -91,6 +95,18 @@ const electronAPI = {
     const handler = () => callback();
     ipcRenderer.on('extra-context:clear', handler);
     return () => ipcRenderer.removeListener('extra-context:clear', handler);
+  },
+
+  // Window drag — move overlay by delta
+  moveWindowBy: (dx: number, dy: number) => ipcRenderer.invoke('window:move', dx, dy),
+
+  // Drag lock — keep mouse events flowing during header drag
+  setDragging: (active: boolean) => {
+    isDragging = active;
+    if (active) {
+      // Force capture mouse events so drag doesn't break
+      setIgnore(false);
+    }
   }
 };
 
@@ -103,6 +119,7 @@ export type ElectronAPI = typeof electronAPI;
 // When mouse is over transparent area (pointer-events: none) → pass through to apps below
 
 let isCurrentlyIgnoring = true;
+let isDragging = false;
 
 function setIgnore(ignore: boolean) {
   if (ignore === isCurrentlyIgnoring) return;
@@ -117,6 +134,12 @@ function setIgnore(ignore: boolean) {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('mousemove', (event) => {
+    // During drag, always capture mouse events — don't toggle
+    if (isDragging) {
+      setIgnore(false);
+      return;
+    }
+
     const target = event.target as Element;
     // If target is html, body, or #root — we're over transparent area
     const isOverEmpty =

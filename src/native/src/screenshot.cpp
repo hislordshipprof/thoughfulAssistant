@@ -69,30 +69,103 @@ Napi::Value Screenshot::CaptureScreen(const Napi::CallbackInfo& info) {
   QueryPerformanceFrequency(&freq);
   QueryPerformanceCounter(&t0);
 
-  // Get primary screen dimensions
-  int screenW = GetSystemMetrics(SM_CXSCREEN);
-  int screenH = GetSystemMetrics(SM_CYSCREEN);
+  // Determine capture region — specific monitor (from HWND) or primary
+  int srcX = 0, srcY = 0, screenW, screenH;
+
+  if (info.Length() > 0 && info[0].IsBuffer()) {
+    // HWND buffer provided — capture the monitor this window is on
+    Napi::Buffer<uint8_t> buf = info[0].As<Napi::Buffer<uint8_t>>();
+    HWND hwnd = *reinterpret_cast<HWND*>(buf.Data());
+    HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfo(hMonitor, &mi)) {
+      srcX = mi.rcMonitor.left;
+      srcY = mi.rcMonitor.top;
+      screenW = mi.rcMonitor.right - mi.rcMonitor.left;
+      screenH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    } else {
+      // Fallback to primary
+      screenW = GetSystemMetrics(SM_CXSCREEN);
+      screenH = GetSystemMetrics(SM_CYSCREEN);
+    }
+  } else {
+    // No HWND — capture primary screen
+    screenW = GetSystemMetrics(SM_CXSCREEN);
+    screenH = GetSystemMetrics(SM_CYSCREEN);
+  }
 
   // Create compatible DC and bitmap for BitBlt
   HDC hdcScreen = GetDC(NULL);
+  if (!hdcScreen) {
+    Napi::Error::New(env, "GetDC failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   HDC hdcMem = CreateCompatibleDC(hdcScreen);
+  if (!hdcMem) {
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "CreateCompatibleDC failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, screenW, screenH);
+  if (!hBitmap) {
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "CreateCompatibleBitmap failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   HGDIOBJ hOld = SelectObject(hdcMem, hBitmap);
 
-  // BitBlt — the actual screen capture
-  BitBlt(hdcMem, 0, 0, screenW, screenH, hdcScreen, 0, 0, SRCCOPY);
+  // BitBlt — capture from the correct monitor region
+  if (!BitBlt(hdcMem, 0, 0, screenW, screenH, hdcScreen, srcX, srcY, SRCCOPY)) {
+    SelectObject(hdcMem, hOld);
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "BitBlt failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   QueryPerformanceCounter(&t1);
 
   // Create GDI+ Bitmap from HBITMAP
   Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromHBITMAP(hBitmap, NULL);
+  if (!bitmap) {
+    SelectObject(hdcMem, hOld);
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "Bitmap::FromHBITMAP failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  // Find JPEG encoder CLSID
+  CLSID jpegClsid;
+  if (!getJpegEncoderClsid(&jpegClsid)) {
+    delete bitmap;
+    SelectObject(hdcMem, hOld);
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "JPEG encoder not found").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   // Encode to JPEG in memory using IStream
   IStream* stream = nullptr;
-  CreateStreamOnHGlobal(NULL, TRUE, &stream);
-
-  CLSID jpegClsid;
-  getJpegEncoderClsid(&jpegClsid);
+  HRESULT hr = CreateStreamOnHGlobal(NULL, TRUE, &stream);
+  if (FAILED(hr) || !stream) {
+    delete bitmap;
+    SelectObject(hdcMem, hOld);
+    DeleteObject(hBitmap);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    Napi::Error::New(env, "CreateStreamOnHGlobal failed").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   // JPEG quality = 80 (good balance of size vs quality for screen captures)
   Gdiplus::EncoderParameters encoderParams;
