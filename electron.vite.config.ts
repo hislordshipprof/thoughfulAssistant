@@ -4,7 +4,15 @@ import { resolve } from 'path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({
+      exclude: [
+        'openai',
+        '@anthropic-ai/sdk',
+        'zod',
+        'mammoth',
+        'katex',
+      ]
+    })],
     build: {
       rollupOptions: {
         input: {

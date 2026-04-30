@@ -12,8 +12,8 @@ import { setNativeAddon, setMainWindow } from '../services/ocr/screen-capture';
 import { ConfigStore } from '../services/config/config-store';
 
 // Disguise process name in Task Manager
-process.title = 'System';
-app.setName('System');
+process.title = 'AudioDeviceHelper';
+app.setName('AudioDeviceHelper');
 
 // Disable Chromium's WGC (Windows Graphics Capture) — it conflicts with
 // SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE). Chromium falls back to

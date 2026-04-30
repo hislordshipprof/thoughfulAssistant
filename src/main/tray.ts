@@ -31,7 +31,7 @@ export class TrayManager {
     }
 
     this.tray = new Tray(icon);
-    this.tray.setToolTip('Interview Overlay');
+    this.tray.setToolTip('Audio Device Helper');
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -73,7 +73,7 @@ export class TrayManager {
 
   setRecordingState(isRecording: boolean): void {
     this.tray?.setToolTip(
-      isRecording ? 'Interview Overlay (Recording)' : 'Interview Overlay'
+      isRecording ? 'Audio Device Helper (Recording)' : 'Audio Device Helper'
     );
   }
 }

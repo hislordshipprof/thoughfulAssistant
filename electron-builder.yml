@@ -1,25 +1,27 @@
-appId: com.interview-overlay.app
-productName: InterviewOverlay
+appId: com.audio-device-helper.app
+productName: AudioDeviceHelper
+executableName: AudioDeviceHelper
 copyright: Copyright © 2024
+npmRebuild: false
 directories:
   output: release
   buildResources: assets
 files:
   - out/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-store/**/*
-  - node_modules/node-addon-api/**/*
 extraResources:
-  - from: src/native/build/Release/
+  - from: build/Release/
     to: native/
     filter:
       - "*.node"
 win:
+  icon: assets/icons/icon.ico
   target:
     - target: nsis
       arch:
         - x64
-  icon: assets/icons/app-icon.ico
+    - target: portable
+      arch:
+        - x64
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
