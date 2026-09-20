@@ -53,7 +53,8 @@ const HOTKEYS: [string, string][] = [
   ['Ctrl+Shift+Q', 'Quit app'],
   ['Ctrl+Shift+W', 'Toggle typing mode'],
   ['Ctrl+Alt+Arrows', 'Move window'],
-  ['Escape', 'Cancel AI / Exit typing'],
+  ['Ctrl+Shift+X', 'Cancel AI'],
+  ['Escape', 'Exit typing mode'],
 ];
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
@@ -179,11 +180,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.interviewMode}
               onChange={e => update('ai', 'interviewMode', e.target.value)}
             >
-              <option value="general">General (Default)</option>
+              <option value="general">General — assessments, screen help, mixed contexts (Default)</option>
+              <option value="behavioural">Behavioural Interview — Tell me about yourself, STAR stories</option>
               <option value="leetcode">LeetCode / Coding Interview</option>
               <option value="system_design">System Design Interview</option>
               <option value="code_modification">Code Modification Interview</option>
             </select>
+          </div>
+          <div className="settings-field">
+            <label className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={settings.ai.usePromptV2}
+                onChange={e => update('ai', 'usePromptV2', e.target.checked)}
+              />
+              Use v2 concise prompt (LeetCode mode only) — ~40% shorter responses
+            </label>
           </div>
           <div className="settings-field">
             <label className="settings-label">OpenAI Model</label>
@@ -192,14 +204,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.openaiModel}
               onChange={e => update('ai', 'openaiModel', e.target.value)}
             >
-              <option value="gpt-5.4">GPT-5.4 (Most Capable)</option>
-              <option value="gpt-5.4-mini">GPT-5.4 Mini (Fast + Capable)</option>
-              <option value="gpt-5.4-nano">GPT-5.4 Nano (Fastest + Cheapest)</option>
-              <option value="gpt-4.1">GPT-4.1 (Best Quality + Instruction Following)</option>
-              <option value="gpt-4.1-mini">GPT-4.1 Mini (Fast + Cheap)</option>
-              <option value="gpt-4.1-nano">GPT-4.1 Nano (Fastest + Cheapest)</option>
-              <option value="gpt-4o">GPT-4o (Legacy)</option>
-              <option value="gpt-4o-mini">GPT-4o Mini (Legacy Fast)</option>
+              <option value="gpt-5.4">GPT-5.4 — RECOMMENDED (best price/quality)</option>
+              <option value="gpt-5.5">GPT-5.5 (best for hard coding, ~2x cost)</option>
+              <option value="gpt-4.1">GPT-4.1 (lowest TTFT, best for conversational)</option>
+              <option value="gpt-5.4-mini">GPT-5.4 Mini (fast + cheap)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -209,9 +217,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.anthropicModel}
               onChange={e => update('ai', 'anthropicModel', e.target.value)}
             >
-              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Best Quality)</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
-              <option value="claude-opus-4-6">Claude Opus 4.6 (Most Capable)</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — RECOMMENDED (best speed/quality, ~1.7s TTFT)</option>
+              <option value="claude-opus-4-7">Claude Opus 4.7 (most thorough, ~3s TTFT, 2× output length)</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 (fastest, ~0.6s TTFT, weaker on small text)</option>
+              <option value="claude-opus-4-6">Claude Opus 4.6 (capable, prior generation)</option>
+              <option value="claude-sonnet-4-5">Claude Sonnet 4.5 (stable, prior generation)</option>
+              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (pinned date version)</option>
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (pinned date version)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -221,8 +233,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.groqModel}
               onChange={e => update('ai', 'groqModel', e.target.value)}
             >
-              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision)</option>
-              <option value="openai/gpt-oss-120b">GPT-OSS 120B (Reasoning)</option>
+              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B (Vision — Preview)</option>
+              <option value="openai/gpt-oss-120b">GPT-OSS 120B (Reasoning, no vision)</option>
+              <option value="openai/gpt-oss-20b">GPT-OSS 20B (Fastest, reasoning, no vision)</option>
+              <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (no vision)</option>
+              <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Fast, no vision)</option>
+              <option value="qwen/qwen3-32b">Qwen 3 32B (Preview, no vision)</option>
             </select>
           </div>
           <div className="settings-field">

@@ -28,6 +28,20 @@ interface OverlayPanelProps {
 
 type Tab = 'ai' | 'transcript';
 
+/**
+ * Prevent the button from capturing DOM focus on click. Without this, clicking
+ * any overlay button gives that button :focus, which can cascade up to a
+ * webContents focus call and an OS-level focus shift — assessment platforms
+ * like Codility / HackerRank then detect "you have left the window".
+ *
+ * The button's onClick still fires normally; only focus is blocked. Use this
+ * on every fire-and-forget click control (icons, tabs, list-row buttons) —
+ * never on text inputs, which legitimately need keyboard focus.
+ */
+const preventFocusSteal = (e: React.MouseEvent) => {
+  e.preventDefault();
+};
+
 const OverlayPanel: React.FC<OverlayPanelProps> = ({
   response,
   isStreaming,
@@ -52,6 +66,8 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('ai');
   const dragState = useRef<{ startX: number; startY: number } | null>(null);
+  // Track if we enabled typing mode (vs. user enabling it via hotkey)
+  const textareaEnabledTyping = useRef(false);
 
   // Custom window drag — mousedown on header, mousemove/mouseup on document
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -108,7 +124,12 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
         <div className="screenshot-strip">
           <div className="screenshot-strip-header">
             <span className="screenshot-count">{screenshots.length} capture{screenshots.length > 1 ? 's' : ''}</span>
-            <button className="screenshot-clear-all" onClick={onClearScreenshots} title="Clear all">
+            <button
+              className="screenshot-clear-all"
+              onClick={onClearScreenshots}
+              onMouseDown={preventFocusSteal}
+              title="Clear all"
+            >
               Clear all
             </button>
           </div>
@@ -119,6 +140,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
                 <button
                   className="screenshot-thumb-remove"
                   onClick={() => onRemoveScreenshot(i)}
+                  onMouseDown={preventFocusSteal}
                   title="Remove"
                 >
                   {'\u2715'}
@@ -137,6 +159,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
           <button
             className={`overlay-header-btn ${isRecording ? 'btn-active-red' : ''}`}
             onClick={onToggleRecording}
+            onMouseDown={preventFocusSteal}
             title={isRecording ? 'Stop Recording (Ctrl+Shift+R)' : 'Start Recording (Ctrl+Shift+R)'}
           >
             {isRecording ? '\u23F9' : '\u23FA'}
@@ -144,6 +167,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
           <button
             className="overlay-header-btn"
             onClick={onCaptureScreen}
+            onMouseDown={preventFocusSteal}
             title="Capture Screen (Ctrl+Shift+S)"
           >
             {'\u2316'}
@@ -151,6 +175,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
           <button
             className="overlay-header-btn"
             onClick={onAskAi}
+            onMouseDown={preventFocusSteal}
             title="Ask AI (Ctrl+Shift+A)"
           >
             {'\u2726'}
@@ -158,6 +183,7 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
           <button
             className="overlay-header-btn"
             onClick={onSettingsClick}
+            onMouseDown={preventFocusSteal}
             title="Settings"
           >
             {'\u2699'}
@@ -170,12 +196,14 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
         <button
           className={`overlay-tab ${activeTab === 'ai' ? 'active' : ''}`}
           onClick={() => setActiveTab('ai')}
+          onMouseDown={preventFocusSteal}
         >
           AI Response
         </button>
         <button
           className={`overlay-tab ${activeTab === 'transcript' ? 'active' : ''}`}
           onClick={() => setActiveTab('transcript')}
+          onMouseDown={preventFocusSteal}
         >
           Transcript {transcriptEntries.length > 0 ? `(${transcriptEntries.length})` : ''}
         </button>
@@ -206,13 +234,25 @@ const OverlayPanel: React.FC<OverlayPanelProps> = ({
           className={`extra-context-input${isTypingMode ? ' extra-context-active' : ''}`}
           value={extraContext}
           onChange={e => onExtraContextChange(e.target.value)}
-          placeholder={isTypingMode ? 'Typing mode active — type anywhere...' : 'Ctrl+Shift+W to type here without losing focus...'}
+          placeholder={isTypingMode ? 'Typing mode active — type anywhere...' : 'Click to type (keys will not pass through)...'}
           rows={2}
           onMouseDown={(e) => {
+            // Enable typing mode to prevent keys from reaching the underlying website
+            if (!isTypingMode) {
+              (window as any).electronAPI?.toggleTypingMode?.(true);
+              textareaEnabledTyping.current = true;
+            }
             (window as any).electronAPI?.setFocusable?.(true);
             setTimeout(() => (e.target as HTMLTextAreaElement).focus(), 50);
           }}
-          onBlur={() => (window as any).electronAPI?.setFocusable?.(false)}
+          onBlur={() => {
+            (window as any).electronAPI?.setFocusable?.(false);
+            // Exit typing mode when textarea loses focus (only if we enabled it)
+            if (textareaEnabledTyping.current) {
+              (window as any).electronAPI?.toggleTypingMode?.(false);
+              textareaEnabledTyping.current = false;
+            }
+          }}
         />
       </div>
 

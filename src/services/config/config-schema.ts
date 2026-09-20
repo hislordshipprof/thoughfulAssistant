@@ -11,10 +11,12 @@ export const ConfigSchema = z.object({
     openaiKey: z.string().default(''),
     anthropicKey: z.string().default(''),
     groqKey: z.string().default(''),
-    openaiModel: z.string().default('gpt-4.1'),
-    anthropicModel: z.string().default('claude-sonnet-4-5-20250929'),
+    openaiModel: z.string().default('gpt-5.4'),
+    anthropicModel: z.string().default('claude-sonnet-4-6'),
     groqModel: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
-    interviewMode: z.enum(['leetcode', 'general', 'system_design', 'code_modification']).default('general')
+    interviewMode: z.enum(['leetcode', 'general', 'behavioural', 'system_design', 'code_modification']).default('general'),
+    // v2 concise prompt for leetcode mode (A/B testing). False = current verbose prompt.
+    usePromptV2: z.boolean().default(false)
   }),
   audio: z.object({
     transcriptionMode: z.enum(['deepgram', 'realtime', 'groq-whisper', 'whisper', 'google-stt']).default('deepgram'),

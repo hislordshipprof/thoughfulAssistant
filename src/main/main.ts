@@ -263,10 +263,13 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
     case 'askAi': {
       const askStart = performance.now();
 
-      // Auto-capture screen if no screenshots are queued
+      // Auto-capture screen if no screenshots are queued.
+      // Pass the active AI provider so the capture is downscaled to that
+      // provider's optimal vision-input spec — saves ~500-1500ms TTFT.
       if (ocrManager.getCaptureCount() === 0) {
-        console.log('[main] No screenshots queued — auto-capturing screen before asking AI...');
-        await ocrManager.captureScreenOnly();
+        const activeProvider = aiManager.getActiveProviderName() ?? undefined;
+        console.log(`[main] No screenshots queued — auto-capturing screen before asking AI (provider=${activeProvider ?? 'default'})...`);
+        await ocrManager.captureScreenOnly(activeProvider);
         const tCapture = performance.now();
         console.log(`[main-timing] auto-capture: ${(tCapture - askStart).toFixed(0)}ms`);
         // Send thumbnail to renderer immediately
@@ -304,7 +307,7 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
         console.log('[main] extraContext: EMPTY — no typed text will be sent to AI');
       }
 
-      aiManager.ask(transcript, screenshotDataUrls, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription, cfg.customPrompt);
+      aiManager.ask(transcript, screenshotDataUrls, extraCtx || undefined, interviewMode, cfg.resume, cfg.jobDescription, cfg.customPrompt, cfg.ai.usePromptV2);
 
       // Clear screenshots after sending — old context is preserved in conversation history
       ocrManager.clearCaptures();
@@ -322,7 +325,8 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
 
     case 'captureScreen': {
       const tCap = performance.now();
-      ocrManager.captureNow().then(() => {
+      const activeProvider = aiManager.getActiveProviderName() ?? undefined;
+      ocrManager.captureNow(activeProvider).then(() => {
         console.log(`[main-timing] captureScreen total: ${(performance.now() - tCap).toFixed(0)}ms`);
         // Send all accumulated screenshot URLs to renderer
         const allCaptures = ocrManager.getAllCaptures();

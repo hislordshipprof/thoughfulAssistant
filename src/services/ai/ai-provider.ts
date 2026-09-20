@@ -22,11 +22,21 @@ export interface AiStreamEvent {
   content: string;
 }
 
+/** Per-call tuning passed by the manager. Providers apply sensible defaults
+ *  if a field is omitted. `mode` is forwarded so a provider may make
+ *  mode-aware decisions (e.g. enabling extended thinking for code tasks). */
+export interface StreamOptions {
+  temperature?: number;
+  maxTokens?: number;
+  mode?: string;
+}
+
 export interface AiProvider {
   readonly name: string;
   streamChat(
     messages: AiMessage[],
-    onEvent: (event: AiStreamEvent) => void
+    onEvent: (event: AiStreamEvent) => void,
+    options?: StreamOptions
   ): Promise<void>;
   cancelStream(): void;
   isConfigured(): boolean;

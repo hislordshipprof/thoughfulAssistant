@@ -1,9 +1,69 @@
 import { EventEmitter } from 'events';
-import { AiProvider, AiMessage, AiStreamEvent, getTextContent } from './ai-provider';
+import { AiProvider, AiMessage, AiStreamEvent, StreamOptions } from './ai-provider';
 import { OpenAiProvider } from './openai-provider';
 import { AnthropicProvider } from './anthropic-provider';
 import { GroqProvider } from './groq-provider';
 import { buildContextMessage, getSystemPrompt, isLiteModel } from './prompt-templates';
+import { buildEpochSummaryBlock, buildAntiRepetitionBlock, buildTopicGapBlock } from './prompts/shared';
+
+/** Per-mode generation tuning. Lower temp for code/factual tasks where
+ *  hallucinated line numbers or wrong traces are costly; higher for open
+ *  conversation where some variation reads more natural. */
+function tuningFor(mode: string | undefined): { temperature: number } {
+  switch (mode) {
+    case 'leetcode':
+    case 'code_modification':
+      return { temperature: 0.2 };
+    case 'system_design':
+      return { temperature: 0.4 };
+    case 'general':
+      // General mode is dominated by MCQ / factual screen-help where
+      // accuracy and consistency matter much more than variation. Same
+      // question must give the same answer.
+      return { temperature: 0.2 };
+    case 'behavioural':
+      // Higher temp for natural conversational variation in interview Q&A.
+      return { temperature: 0.7 };
+    default:
+      // Unknown mode — moderate default
+      return { temperature: 0.5 };
+  }
+}
+
+/** Decide whether to inject the anti-repetition block for the active mode.
+ *  Anti-repetition tells the model "don't repeat your previous answers" —
+ *  helpful when fresh angles are desirable across turns, harmful when the
+ *  same question (e.g. MCQ on the same screenshot) deserves the same answer.
+ *
+ *  ON for: behavioural (vary projects across Q&A), system_design (phase 4+
+ *    deep-dives benefit from fresh angles), leetcode/code_modification follow-ups,
+ *    general (coding follow-ups need fresh responses, not full re-generation;
+ *    MCQ answers are unaffected because the correct letter stays the same).
+ */
+function shouldUseAntiRepetition(_mode: string | undefined): boolean {
+  return true;
+}
+
+/** Per-mode hard cap on conversation history messages. Independent of the
+ *  char-budget pruning in buildSmartHistory — this kicks in even when there's
+ *  budget room left, because for some modes long history is bias not context.
+ *
+ *  General mode: each ask is typically a fresh screenshot (different MCQ,
+ *  different page). Long history of prior answers biases the model and adds
+ *  no useful context. Cap to last 4 exchanges (8 messages).
+ *
+ *  Other modes: no extra cap — char-budget pruning handles it. Interview
+ *  modes benefit from full conversational continuity within budget.
+ */
+function capHistoryForMode(history: AiMessage[], mode: string | undefined): AiMessage[] {
+  if (mode === 'general') {
+    const MAX_GENERAL_MSGS = 8;
+    if (history.length > MAX_GENERAL_MSGS) {
+      return history.slice(-MAX_GENERAL_MSGS);
+    }
+  }
+  return history;
+}
 
 /** Max chars for the epoch summary of old compressed messages */
 const EPOCH_SUMMARY_MAX_CHARS = 2000;
@@ -24,6 +84,11 @@ export class AiManager extends EventEmitter {
   private extraContext = '';
   private epochSummary: string | null = null;
   private lastRequestTimestamp = 0;
+  /** Monotonic attempt counter. Incremented at the start of every ask() and
+   *  every cancelStream(). Token callbacks check the captured attempt id and
+   *  discard tokens from stale attempts — prevents abandoned provider streams
+   *  from interleaving into the UI when failover or re-entry happens. */
+  private activeAttemptId = 0;
 
   constructor() {
     super();
@@ -86,14 +151,19 @@ export class AiManager extends EventEmitter {
 
     const assistantMsgCount = this.conversationHistory.filter(m => m.role === 'assistant').length;
     if (interviewMode === 'system_design') {
+      // Phase 1: scope qs, Phase 2: requirements + estimation, Phase 3:
+      // architecture + diagram, Phase 4+: adaptive deep-dive (no re-draw).
       if (assistantMsgCount === 0) return 1;
       if (assistantMsgCount === 1) return 2;
-      return 3;
+      if (assistantMsgCount === 2) return 3;
+      return 4;
     } else if (interviewMode === 'code_modification') {
+      // Phase 1: analysis, Phase 2: fixes, Phase 3+: follow-up
       if (assistantMsgCount === 0) return 1;
       if (assistantMsgCount === 1) return 2;
       return 3;
     } else {
+      // Leetcode: Phase 1 once, then Phase 2
       return assistantMsgCount === 0 ? 1 : 2;
     }
   }
@@ -202,18 +272,16 @@ export class AiManager extends EventEmitter {
       const maxLineChars = isEarly ? 400 : 200;
 
       if (msg.role === 'user') {
-        // Extract meaningful content, skip headers and injected metadata
+        // Extract meaningful content, skip XML wrappers and injected metadata
         const meaningful = text.split('\n')
           .filter(l => {
             const t = l.trim();
             return t.length > 15
-              && !t.startsWith('##')
+              && !t.startsWith('<')         // XML tag opens / closes
+              && !t.startsWith('##')        // legacy markdown headers
               && !t.startsWith('[PRIORITY')
+              && !t.startsWith('```')
               && !t.startsWith('Speaker labels:')
-              && !t.startsWith('The following screenshot')
-              && !t.startsWith('Analyze your previous')
-              && !t.startsWith('Read your conversation')
-              && !t.startsWith('You are in Phase')
               && !t.startsWith('These labels are based');
           })
           .slice(0, isEarly ? 3 : 1);
@@ -252,7 +320,8 @@ export class AiManager extends EventEmitter {
     interviewMode?: string,
     resume?: string,
     jobDescription?: string,
-    customPrompt?: string
+    customPrompt?: string,
+    usePromptV2 = false
   ): Promise<void> {
     const fallbackChain = this.getFallbackChain();
     if (fallbackChain.length === 0) {
@@ -260,10 +329,23 @@ export class AiManager extends EventEmitter {
       return;
     }
 
+    // Re-entry guard. If a previous ask() is still streaming (user pressed
+    // askAi again, or hotkey debouncing failed), cancel it FIRST so its
+    // in-flight tokens don't interleave with this new one. Bumping
+    // activeAttemptId invalidates all stale callbacks; a microtask tick
+    // gives the abort signal a chance to propagate before we set up the
+    // new attempt's state.
     if (this.isStreaming) {
+      this.activeAttemptId++;
       this.streamingProvider?.cancelStream();
       this.streamingProvider = null;
+      this.isStreaming = false;
+      await new Promise<void>(resolve => setImmediate(resolve));
     }
+
+    // Each ask() is one logical attempt. Capture the id so callbacks within
+    // this invocation can detect if a newer attempt has superseded them.
+    const myAttemptId = ++this.activeAttemptId;
 
     // Track time between requests for new-topic detection
     const now = Date.now();
@@ -276,14 +358,27 @@ export class AiManager extends EventEmitter {
     let lastError = '';
 
     for (let i = 0; i < fallbackChain.length; i++) {
+      // Stale-attempt guard: if a newer ask() superseded us between iterations,
+      // bail out without further work or events.
+      if (myAttemptId !== this.activeAttemptId) {
+        console.log(`[ai-manager] attempt ${myAttemptId} superseded by ${this.activeAttemptId} — abandoning`);
+        return;
+      }
+
       const provider = fallbackChain[i];
       const isLast = i === fallbackChain.length - 1;
       const model = provider.getModel();
       const providerName = provider.name;
 
-      // Model-aware history: budget scales with model capability
+      // Model-aware history: budget scales with model capability.
+      // Then apply per-mode hard cap (general mode: last 4 exchanges only —
+      // each ask is a fresh screen so old history is bias not context).
       const charBudget = this.getHistoryCharBudget(model, providerName);
       const smartHistory = this.buildSmartHistory(charBudget);
+      const cappedHistory = capHistoryForMode(smartHistory, interviewMode);
+      if (cappedHistory.length < smartHistory.length) {
+        console.log(`[ai-manager] mode '${interviewMode}' history cap: ${smartHistory.length} → ${cappedHistory.length} msgs`);
+      }
 
       // Rebuild provider-specific prompt and context (different models may use different prompt variants)
       const litePhase = this.computePhase(interviewMode || 'general');
@@ -291,7 +386,7 @@ export class AiManager extends EventEmitter {
         console.log(`[ai-manager] ${model} — explicit phase: ${litePhase}`);
       }
 
-      const baseSystemPrompt = getSystemPrompt(interviewMode || 'general', resume, jobDescription, model, providerName, customPrompt);
+      const baseSystemPrompt = getSystemPrompt(interviewMode || 'general', resume, jobDescription, model, providerName, customPrompt, usePromptV2);
       const contextContent = buildContextMessage(transcript, screenshots, userQuery, interviewMode, litePhase, !!resume, !!jobDescription, !!(customPrompt && customPrompt.trim()));
 
       // Store text-only version BEFORE injecting transient instructions (so they don't persist in history)
@@ -303,36 +398,33 @@ export class AiManager extends EventEmitter {
       // Inject epoch summary into system prompt for long conversations
       let systemPrompt = baseSystemPrompt;
       if (this.epochSummary) {
-        systemPrompt += `\n\n═══ EARLIER CONVERSATION CONTEXT ═══\nThe following summarizes earlier parts of this conversation that are no longer shown in full. Use for continuity — do not respond to it directly.\n\n${this.epochSummary}`;
+        systemPrompt += `\n\n${buildEpochSummaryBlock(this.epochSummary)}`;
         console.log(`[ai-manager] epoch summary injected into system prompt (${this.epochSummary.length} chars)`);
       }
 
-      // Anti-repetition: instruct LLM not to repeat previous responses
+      // Anti-repetition: instruct LLM not to repeat previous responses.
+      // GATED by mode — general mode skips this because consistent answers
+      // to MCQ/factual questions matter more than fresh angles.
       const assistantCount = this.conversationHistory.filter(m => m.role === 'assistant').length;
-      if (assistantCount > 0) {
-        contextContent.push({
-          type: 'text',
-          text: `## Anti-Repetition [IMPORTANT]\nYou have ${assistantCount} previous response${assistantCount > 1 ? 's' : ''} in this conversation (visible in the message history above). Do NOT repeat the same points, examples, code, or explanations. Each response must provide NEW information, deeper analysis, or address different aspects. If the interviewer re-asks something, give a fresh angle.`
-        });
+      const useAntiRep = assistantCount > 0 && shouldUseAntiRepetition(interviewMode);
+      if (useAntiRep) {
+        contextContent.push({ type: 'text', text: buildAntiRepetitionBlock(assistantCount) });
       }
 
       // Time-gap awareness: nudge LLM when interviewer may have changed topics
       if (timeSinceLastMs > NEW_TOPIC_GAP_MS && this.conversationHistory.length > 0) {
         const gapMinutes = Math.round(timeSinceLastMs / 60000);
-        contextContent.push({
-          type: 'text',
-          text: `[Note: ${gapMinutes} minutes have passed since the last exchange. The interviewer may have moved to a new topic. If this appears to be a new problem, start fresh rather than continuing your previous analysis.]`
-        });
+        contextContent.push({ type: 'text', text: buildTopicGapBlock(gapMinutes) });
         console.log(`[ai-manager] time-gap warning injected (${gapMinutes} min gap)`);
       }
 
       const messages: AiMessage[] = [
         { role: 'system', content: systemPrompt },
-        ...smartHistory,
+        ...cappedHistory,
         { role: 'user', content: contextContent }
       ];
 
-      console.log(`[ai-manager] trying ${providerName} (${model}) — ${messages.length} msgs (1 system + ${smartHistory.length} history + 1 user), epoch: ${this.epochSummary ? 'yes' : 'no'}, anti-rep: ${assistantCount > 0 ? 'yes' : 'no'}`);
+      console.log(`[ai-manager] trying ${providerName} (${model}) — ${messages.length} msgs (1 system + ${cappedHistory.length} history + 1 user), epoch: ${this.epochSummary ? 'yes' : 'no'}, anti-rep: ${useAntiRep ? 'yes' : 'no'} (mode=${interviewMode || 'general'})`);
 
       this.currentResponse = '';
       this.streamingProvider = provider;
@@ -342,9 +434,29 @@ export class AiManager extends EventEmitter {
       let firstTokenTime = 0;
       let tokenCount = 0;
 
-      // Try streaming with this provider
+      // Per-mode tuning (temperature). max_tokens picks the model-aware default
+      // inside the provider unless explicitly overridden here.
+      const streamOptions: StreamOptions = {
+        ...tuningFor(interviewMode),
+        mode: interviewMode,
+      };
+
+      // Try streaming with this provider. Every callback is guarded by
+      // myAttemptId so late tokens from an abandoned provider (e.g. one
+      // that errored but whose underlying HTTP request still completes)
+      // are silently discarded instead of interleaving into the UI.
       const error = await new Promise<string | null>((resolve) => {
+        let settled = false;
+        const safeResolve = (v: string | null) => {
+          if (settled) return;
+          settled = true;
+          resolve(v);
+        };
+
         provider.streamChat(messages, (event: AiStreamEvent) => {
+          // Stale-attempt guard: discard everything from a superseded attempt.
+          if (myAttemptId !== this.activeAttemptId) return;
+
           switch (event.type) {
             case 'token':
               tokenCount++;
@@ -356,16 +468,24 @@ export class AiManager extends EventEmitter {
               this.emit('token', event.content);
               break;
             case 'done':
-              resolve(null);
+              safeResolve(null);
               break;
             case 'error':
-              resolve(event.content);
+              safeResolve(event.content);
               break;
           }
-        }).catch((err: Error) => {
-          resolve(err.message || 'Provider threw an exception');
+        }, streamOptions).catch((err: Error) => {
+          if (myAttemptId !== this.activeAttemptId) return;
+          safeResolve(err.message || 'Provider threw an exception');
         });
       });
+
+      // Stale-attempt guard: a newer ask() has taken over while we were
+      // awaiting. Don't emit done/error and don't store history.
+      if (myAttemptId !== this.activeAttemptId) {
+        console.log(`[ai-manager] attempt ${myAttemptId} superseded mid-stream — abandoning`);
+        return;
+      }
 
       if (!error) {
         // Log total timing
@@ -391,10 +511,20 @@ export class AiManager extends EventEmitter {
 
       lastError = error;
 
+      // CRITICAL: cancel the abandoned provider's stream BEFORE moving on.
+      // Without this, the underlying HTTP request keeps streaming tokens that
+      // would interleave with the next provider's response in the UI.
+      try {
+        provider.cancelStream();
+      } catch (cancelErr) {
+        console.warn(`[ai-manager] failed to cancel ${providerName} stream:`, cancelErr);
+      }
+
       // If tokens were already streamed, don't retry — partial response is visible to user
       if (this.currentResponse.length > 0) {
         console.log(`[ai-manager] ${providerName} failed mid-stream: ${error}`);
         this.isStreaming = false;
+        this.streamingProvider = null;
         this.emit('error', error);
         return;
       }
@@ -407,10 +537,14 @@ export class AiManager extends EventEmitter {
 
     // All providers failed
     this.isStreaming = false;
+    this.streamingProvider = null;
     this.emit('error', lastError || 'All providers failed');
   }
 
   cancelStream(): void {
+    // Bump attempt id BEFORE cancelling so any in-flight callbacks from the
+    // current provider are immediately invalidated and discarded.
+    this.activeAttemptId++;
     this.streamingProvider?.cancelStream();
     this.streamingProvider = null;
     this.isStreaming = false;

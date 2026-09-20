@@ -48,16 +48,51 @@ export function registerIpcHandlers(
     return true;
   });
 
-  // Wire AI events to renderer
+  // Wire AI events to renderer.
+  // Tokens are batched: without this, each token was one IPC message (one
+  // structured-clone + one renderer event-loop wakeup). A ~1500-token response
+  // = ~1500 round trips. Coalescing on a ~16ms timer cuts that 10-20x while
+  // still delivering fast enough that the renderer's own 90ms flush is the
+  // pacing floor, not IPC.
+  const TOKEN_FLUSH_MS = 16;
+  let tokenBuffer = '';
+  let tokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushTokenBuffer = (): void => {
+    if (tokenFlushTimer) {
+      clearTimeout(tokenFlushTimer);
+      tokenFlushTimer = null;
+    }
+    if (tokenBuffer) {
+      safeSend('ai:token', tokenBuffer);
+      tokenBuffer = '';
+    }
+  };
+
+  // New stream starting — drop anything buffered from a superseded attempt so
+  // its stale tail can't prepend onto the new response.
+  aiManager.on('stream-start', () => {
+    if (tokenFlushTimer) {
+      clearTimeout(tokenFlushTimer);
+      tokenFlushTimer = null;
+    }
+    tokenBuffer = '';
+  });
+
   aiManager.on('token', (token: string) => {
-    safeSend('ai:token', token);
+    tokenBuffer += token;
+    if (!tokenFlushTimer) {
+      tokenFlushTimer = setTimeout(flushTokenBuffer, TOKEN_FLUSH_MS);
+    }
   });
 
   aiManager.on('done', (response: string) => {
+    flushTokenBuffer();
     safeSend('ai:done', response);
   });
 
   aiManager.on('error', (error: string) => {
+    flushTokenBuffer(); // preserve any partial tokens already streamed
     safeSend('ai:error', error);
   });
 
@@ -89,7 +124,8 @@ export function registerIpcHandlers(
 
   // OCR handlers
   ipcMain.handle('ocr:capture', async () => {
-    await ocrManager.captureNow();
+    const activeProvider = aiManager.getActiveProviderName() ?? undefined;
+    await ocrManager.captureNow(activeProvider);
     // Send all accumulated screenshots to renderer
     const allCaptures = ocrManager.getAllCaptures();
     const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
@@ -241,5 +277,20 @@ export function registerIpcHandlers(
       console.error(`[ipc] file:pick-and-extract — FAILED: "${extraction.fileName}" → ${extraction.error}`);
     }
     return extraction;
+  });
+
+  // Typing mode toggle — explicitly enable/disable typing mode
+  // Receives an explicit state (true/false) to set typing mode
+  ipcMain.handle('typing:toggle', (_event, enableTypingMode: boolean) => {
+    const addon = windowManager.getNativeAddon();
+    if (!addon?.setTypingMode) {
+      console.warn('[ipc] typing:toggle — setTypingMode not available');
+      return false;
+    }
+
+    addon.setTypingMode(enableTypingMode);
+    safeSend('typing:mode', enableTypingMode);
+    console.log(`[ipc] typing:toggle → ${enableTypingMode ? 'enabled' : 'disabled'}`);
+    return enableTypingMode;
   });
 }

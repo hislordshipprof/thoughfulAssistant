@@ -6,10 +6,11 @@ export const defaultConfig: AppConfig = {
     openaiKey: '',
     anthropicKey: '',
     groqKey: '',
-    openaiModel: 'gpt-4o',
-    anthropicModel: 'claude-sonnet-4-5-20250929',
+    openaiModel: 'gpt-5.4',
+    anthropicModel: 'claude-sonnet-4-6',
     groqModel: 'meta-llama/llama-4-scout-17b-16e-instruct',
-    interviewMode: 'general'
+    interviewMode: 'general',
+    usePromptV2: false
   },
   audio: {
     transcriptionMode: 'deepgram',
@@ -39,7 +40,7 @@ export const defaultConfig: AppConfig = {
     captureScreen: { vkCodes: [0x11, 0x10, 0x53], label: 'Ctrl+Shift+S' },
     toggleRecording: { vkCodes: [0x11, 0x10, 0x52], label: 'Ctrl+Shift+R' },
     toggleInteract: { vkCodes: [0x11, 0x10, 0x49], label: 'Ctrl+Shift+I' },
-    cancelStream: { vkCodes: [0x1B], label: 'Escape' },
+    cancelStream: { vkCodes: [0x11, 0x10, 0x58], label: 'Ctrl+Shift+X' },
     resetAll: { vkCodes: [0x11, 0x10, 0x4E], label: 'Ctrl+Shift+N' },
     scrollUp: { vkCodes: [0x11, 0x10, 0x26], label: 'Ctrl+Shift+Up' },
     scrollDown: { vkCodes: [0x11, 0x10, 0x28], label: 'Ctrl+Shift+Down' },

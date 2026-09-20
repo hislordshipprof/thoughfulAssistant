@@ -83,6 +83,47 @@ export class WindowManager {
       this.stealthShow();
     });
 
+    // Prevent Chromium from processing keyboard shortcuts that conflict with
+    // our global hotkeys. Without this, when the overlay window is focusable
+    // (e.g., settings modal open, textarea focused), Electron's webContents
+    // processes shortcuts BEFORE the low-level keyboard hook can swallow them,
+    // causing the underlying website/browser to also react to them.
+    //
+    // This is how Interview Coder, CodeSignal, LeetCode, etc. handle it:
+    // they intercept shortcuts at the browser level to prevent double-firing.
+    this.mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+
+      const key = input.key.toLowerCase();
+      const ctrl = input.control;
+      const shift = input.shift;
+      const alt = input.alt;
+
+      // Block specific hotkey combos used by this app
+      const isAppHotkey =
+        (ctrl && shift && key === 'h') ||      // toggleOverlay
+        (ctrl && shift && key === 'a') ||      // askAi ⭐ main one
+        (ctrl && shift && key === 's') ||      // captureScreen
+        (ctrl && shift && key === 'r') ||      // toggleRecording ⭐ main one
+        (ctrl && shift && key === 'i') ||      // toggleInteract
+        (ctrl && shift && key === 'n') ||      // resetAll
+        (ctrl && shift && key === 'q') ||      // quitApp
+        (ctrl && shift && key === 'w') ||      // toggleTypingMode
+        (ctrl && shift && key === 'arrowup') ||   // scrollUp
+        (ctrl && shift && key === 'arrowdown') || // scrollDown
+        (ctrl && alt && key === 'arrowup') ||     // moveWindowUp
+        (ctrl && alt && key === 'arrowdown') ||   // moveWindowDown
+        (ctrl && alt && key === 'arrowleft') ||   // moveWindowLeft
+        (ctrl && alt && key === 'arrowright') ||  // moveWindowRight
+        (ctrl && !shift && !alt && key === 'h') ||// hideApp (Ctrl+H alone)
+        (ctrl && shift && key === 'x'); // cancelStream
+
+      if (isAppHotkey) {
+        // Prevent Electron/Chromium from handling it - let the LL hook handle it
+        event.preventDefault();
+      }
+    });
+
     this.mainWindow.on('closed', () => {
       if (this.emergencyHideTimer) {
         clearTimeout(this.emergencyHideTimer);
@@ -181,13 +222,15 @@ export class WindowManager {
     }
   }
 
-  /** Temporarily enable focus for typing (settings modal). Call with false when done. */
+  /** Temporarily enable focus for typing (settings modal). Call with false when done.
+   *  Deliberately does NOT call mainWindow.focus() — proactively yanking OS focus
+   *  causes the host browser tab (e.g. Codility) to fire blur / visibilitychange,
+   *  which assessment platforms detect as "you have left the window".
+   *  Setting focusable=true is enough to allow inputs to receive focus IF the user
+   *  actively clicks into one. Opening the settings modal alone does not steal focus. */
   setFocusableForInput(enable: boolean): void {
     if (!this.mainWindow) return;
     this.mainWindow.setFocusable(enable);
-    if (enable) {
-      this.mainWindow.focus();
-    }
     console.log(`[window] Focusable for input: ${enable}`);
   }
 

@@ -23,6 +23,7 @@ export class ConfigStore {
       defaults: defaultConfig
     });
     this.migrateHotkeys();
+    this.migrateGroqModel();
     this.fillMissingHotkeys();
   }
 
@@ -42,6 +43,18 @@ export class ConfigStore {
 
     if (changed) {
       this.store.set('hotkeys', hotkeys as any);
+    }
+  }
+
+  /** Replace deprecated Groq model IDs with the current default. */
+  private migrateGroqModel(): void {
+    const ai = this.store.get('ai') as any;
+    if (!ai?.groqModel) return;
+    const deprecated = ['meta-llama/llama-4-maverick-17b-128e-instruct'];
+    if (deprecated.includes(ai.groqModel)) {
+      ai.groqModel = defaultConfig.ai.groqModel;
+      this.store.set('ai', ai);
+      console.log(`[config] Migrated deprecated Groq model to ${ai.groqModel}`);
     }
   }
 

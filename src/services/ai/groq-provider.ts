@@ -1,10 +1,26 @@
 import OpenAI from 'openai';
-import { AiProvider, AiMessage, AiStreamEvent, MessageContent } from './ai-provider';
+import { AiProvider, AiMessage, AiStreamEvent, MessageContent, StreamOptions } from './ai-provider';
 
-const GROQ_VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct'];
+/** Vision-capable Groq models (April 2026). Llama-4-maverick was deprecated
+ *  on 3/9/26 — removed. Scout is currently the only vision-capable model on
+ *  Groq and is preview-status (may be deprecated at short notice). */
+const GROQ_VISION_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+];
 
 function supportsVision(model: string): boolean {
   return GROQ_VISION_MODELS.some(m => model.includes(m));
+}
+
+/** Per-model output token cap. Verified against current Groq model list. */
+function defaultMaxTokensFor(model: string): number {
+  if (model.includes('llama-4-scout')) return 8192;
+  if (model.includes('llama-3.3-70b')) return 8192;
+  if (model.includes('llama-3.1-8b')) return 8192;
+  if (model.includes('gpt-oss-120b')) return 8192;
+  if (model.includes('gpt-oss-20b')) return 8192;
+  if (model.includes('qwen3-32b')) return 8192;
+  return 4096;
 }
 
 type GroqContent = string | Array<
@@ -65,7 +81,11 @@ export class GroqProvider implements AiProvider {
     }
   }
 
-  async streamChat(messages: AiMessage[], onEvent: (event: AiStreamEvent) => void): Promise<void> {
+  async streamChat(
+    messages: AiMessage[],
+    onEvent: (event: AiStreamEvent) => void,
+    options: StreamOptions = {}
+  ): Promise<void> {
     if (!this.client) {
       onEvent({ type: 'error', content: 'Groq API key not configured' });
       return;
@@ -79,16 +99,19 @@ export class GroqProvider implements AiProvider {
         content: toGroqContent(m.content, this.model)
       }));
 
+      const temperature = options.temperature ?? 0.7;
+      const maxTokens = options.maxTokens ?? defaultMaxTokensFor(this.model);
+
       const tApiStart = performance.now();
-      console.log(`[groq-timing] sending request to ${this.model}...`);
+      console.log(`[groq-timing] sending request to ${this.model} (temp=${temperature}, max=${maxTokens})...`);
 
       const stream = await this.client.chat.completions.create(
         {
           model: this.model,
           messages: groqMessages as any,
           stream: true,
-          temperature: 0.7,
-          max_completion_tokens: 8192
+          temperature,
+          max_completion_tokens: maxTokens
         },
         { signal: this.abortController.signal }
       );

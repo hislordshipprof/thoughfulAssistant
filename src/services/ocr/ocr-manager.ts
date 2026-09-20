@@ -54,25 +54,28 @@ export class OcrManager extends EventEmitter {
   /**
    * On-demand capture triggered by hotkey.
    * Screenshot only — vision model reads images directly.
+   * `provider` selects the per-provider downscale profile.
    */
-  async captureNow(): Promise<void> {
-    await this.captureScreenOnly();
+  async captureNow(provider?: string): Promise<void> {
+    await this.captureScreenOnly(provider);
   }
 
   /**
    * Capture screenshot only — no OCR processing.
    * Used for vision model workflow where images are sent directly to AI.
+   * `provider` (anthropic|openai|groq) selects the per-provider downscale
+   * profile so the image matches each model's optimal vision-input spec.
    */
-  async captureScreenOnly(): Promise<void> {
+  async captureScreenOnly(provider?: string): Promise<void> {
     this.isCapturing = true;
     try {
-      const captured = await captureScreen();
+      const captured = await captureScreen(undefined, undefined, undefined, provider);
       this.lastCapture = captured;
       if (this.captures.length >= MAX_CAPTURES) {
         this.captures.shift();
       }
       this.captures.push({ image: captured, text: '' });
-      console.log(`[capture] Screenshot #${this.captures.length} ready (vision mode)`);
+      console.log(`[capture] Screenshot #${this.captures.length} ready (vision mode, provider=${provider ?? 'default'})`);
     } finally {
       this.isCapturing = false;
     }

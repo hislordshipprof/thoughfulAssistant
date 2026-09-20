@@ -81,6 +81,7 @@ const electronAPI = {
   },
 
   // Typing mode
+  toggleTypingMode: (forceState?: boolean) => ipcRenderer.invoke('typing:toggle', forceState),
   onTypingEvent: (callback: (event: any) => void) => {
     const handler = (_event: any, event: any) => callback(event);
     ipcRenderer.on('typing:event', handler);
