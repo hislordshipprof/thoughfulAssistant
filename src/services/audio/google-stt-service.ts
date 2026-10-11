@@ -125,10 +125,10 @@ export class GoogleSttService extends EventEmitter {
         },
       };
 
-      const resp = await fetch('https://speech.googleapis.com/v1/speech:recognize', {
+      const url = `https://speech.googleapis.com/v1/speech:recognize?key=${encodeURIComponent(this.apiKey)}`;
+      const resp = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
           'x-goog-user-project': this.projectId,
         },

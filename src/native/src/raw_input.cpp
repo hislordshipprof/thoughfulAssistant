@@ -101,6 +101,14 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
   bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
   bool isUp   = (wParam == WM_KEYUP   || wParam == WM_SYSKEYUP);
 
+  // L4: Ignore synthetic (injected) keystrokes. Real hardware never sets
+  // LLKHF_INJECTED. Passing injected keys straight through means a SendInput
+  // probe of one of our hotkeys is NOT swallowed — so hook-presence tests can't
+  // detect us, and automation can't trigger our hotkeys.
+  if (kb->flags & LLKHF_INJECTED) {
+    return CallNextHookEx(g_llKeyboardHook, nCode, wParam, lParam);
+  }
+
   // Always update modifier state first (even if we swallow the key later,
   // the internal tracking must stay accurate for hotkey matching)
   switch (vk) {
@@ -231,6 +239,27 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
   return CallNextHookEx(g_llKeyboardHook, nCode, wParam, lParam);
 }
 
+// L3: Periodic re-hook. Windows calls WH_KEYBOARD_LL hooks most-recently-
+// installed first. Any process that installs its own LL hook AFTER ours (e.g. a
+// proctoring agent that launches after us) would sit ahead of us and see keys
+// before we swallow them. Reinstalling on a timer reclaims front-of-chain.
+#define REHOOK_TIMER_ID    1
+#define REHOOK_INTERVAL_MS 3000
+
+// Install (or reinstall) the low-level keyboard hook at the front of the chain.
+static void InstallKeyboardHook() {
+  if (g_llKeyboardHook) {
+    UnhookWindowsHookEx(g_llKeyboardHook);
+    g_llKeyboardHook = nullptr;
+  }
+  g_llKeyboardHook = SetWindowsHookExW(
+    WH_KEYBOARD_LL,
+    LowLevelKeyboardProc,
+    GetModuleHandleW(nullptr),
+    0   // 0 = system-wide hook
+  );
+}
+
 // -------------------------------------------------------
 // Window procedure for the hidden message-only window
 // -------------------------------------------------------
@@ -270,21 +299,13 @@ static LRESULT CALLBACK RawInputWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
   // --- Install the low-level keyboard hook ---
   if (msg == WM_REGISTER_HOTKEYS) {
-    // Remove previous hook if any
-    if (g_llKeyboardHook) {
-      UnhookWindowsHookEx(g_llKeyboardHook);
-      g_llKeyboardHook = nullptr;
-    }
     g_swallowedVks.clear();
 
-    g_llKeyboardHook = SetWindowsHookExW(
-      WH_KEYBOARD_LL,
-      LowLevelKeyboardProc,
-      GetModuleHandleW(nullptr),
-      0   // 0 = system-wide hook
-    );
+    InstallKeyboardHook();
 
     if (g_llKeyboardHook) {
+      // L3: keep reclaiming front-of-chain while hotkeys are registered.
+      SetTimer(hwnd, REHOOK_TIMER_ID, REHOOK_INTERVAL_MS, nullptr);
       std::lock_guard<std::mutex> lock(g_hotkeyMutex);
       printf("[raw_input] WH_KEYBOARD_LL hook installed, monitoring %zu hotkeys\n", g_hotkeys.size());
       for (const auto& hk : g_hotkeys) {
@@ -296,8 +317,17 @@ static LRESULT CALLBACK RawInputWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     return 0;
   }
 
+  // --- Periodic re-hook to stay at the front of the LL hook chain ---
+  if (msg == WM_TIMER && wParam == REHOOK_TIMER_ID) {
+    if (g_llKeyboardHook) {
+      InstallKeyboardHook();
+    }
+    return 0;
+  }
+
   // --- Remove the low-level keyboard hook ---
   if (msg == WM_UNREGISTER_HOTKEYS) {
+    KillTimer(hwnd, REHOOK_TIMER_ID);
     if (g_llKeyboardHook) {
       UnhookWindowsHookEx(g_llKeyboardHook);
       g_llKeyboardHook = nullptr;
@@ -312,6 +342,7 @@ static LRESULT CALLBACK RawInputWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
   }
 
   if (msg == WM_CLOSE || msg == WM_DESTROY) {
+    KillTimer(hwnd, REHOOK_TIMER_ID);
     // Unhook LL keyboard hook
     if (g_llKeyboardHook) {
       UnhookWindowsHookEx(g_llKeyboardHook);
@@ -357,21 +388,13 @@ void RawInputThreadProc(Napi::ThreadSafeFunction tsfn) {
     return;
   }
 
-  // Register for raw keyboard input with RIDEV_INPUTSINK (receive even when not focused)
-  RAWINPUTDEVICE rid = {};
-  rid.usUsagePage = 0x01; // Generic Desktop
-  rid.usUsage = 0x06;     // Keyboard
-  rid.dwFlags = RIDEV_INPUTSINK;
-  rid.hwndTarget = g_messageWindow;
-
-  if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-    DestroyWindow(g_messageWindow);
-    g_messageWindow = nullptr;
-    g_listening = false;
-    tsfn.Release();
-    return;
-  }
-
+  // L7: No raw-input keyboard device is registered. RIDEV_INPUTSINK previously
+  // delivered EVERY keystroke typed anywhere on the machine (a system-wide
+  // keylogging surface) purely so no-modifier hotkeys could be matched in JS.
+  // All hotkeys now carry modifiers and are handled entirely by the
+  // WH_KEYBOARD_LL hook, so this message-only window exists solely to host the
+  // hook's message loop and receive WM_REGISTER_HOTKEYS/WM_TIMER. WM_INPUT is
+  // therefore never delivered.
   g_listening = true;
 
   // Message pump

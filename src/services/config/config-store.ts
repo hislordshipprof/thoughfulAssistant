@@ -23,6 +23,7 @@ export class ConfigStore {
       defaults: defaultConfig
     });
     this.migrateHotkeys();
+    this.migrateGroqModel();
     this.fillMissingHotkeys();
   }
 
@@ -45,26 +46,40 @@ export class ConfigStore {
     }
   }
 
+  /** Replace deprecated Groq model IDs with the current default. */
+  private migrateGroqModel(): void {
+    const ai = this.store.get('ai') as any;
+    if (!ai?.groqModel) return;
+    const deprecated = ['meta-llama/llama-4-maverick-17b-128e-instruct'];
+    if (deprecated.includes(ai.groqModel)) {
+      ai.groqModel = defaultConfig.ai.groqModel;
+      this.store.set('ai', ai);
+      console.log(`[config] Migrated deprecated Groq model to ${ai.groqModel}`);
+    }
+  }
+
   /** Fix stale left/right-specific VK codes in persisted hotkeys. */
   private migrateHotkeys(): void {
     const hotkeys = this.store.get('hotkeys');
     if (!hotkeys) return;
 
-    let changed = false;
+    let anyChanged = false;
     for (const [name, binding] of Object.entries(hotkeys)) {
+      let entryChanged = false;
       const migrated = binding.vkCodes.map((vk: number) => {
         const generic = VK_MIGRATION[vk];
         if (generic !== undefined) {
-          changed = true;
+          entryChanged = true;
           return generic;
         }
         return vk;
       });
-      if (changed) {
+      if (entryChanged) {
         (hotkeys as any)[name] = { ...binding, vkCodes: migrated };
+        anyChanged = true;
       }
     }
-    if (changed) {
+    if (anyChanged) {
       this.store.set('hotkeys', hotkeys);
       console.log('[config] Migrated hotkey VK codes to generic values');
     }
@@ -82,7 +97,11 @@ export class ConfigStore {
     const result = ConfigSchema.safeParse(fullConfig);
 
     if (result.success) {
-      this.store.set(key, value);
+      if (value === undefined) {
+        this.store.delete(key);
+      } else {
+        this.store.set(key, value);
+      }
     } else {
       throw new Error(`Invalid config for ${key}: ${result.error.message}`);
     }

@@ -1,0 +1,699 @@
+{
+  "sha": "706cbe05f4fd42aeeedae19975ef76422c5c9f10",
+  "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/706cbe05f4fd42aeeedae19975ef76422c5c9f10",
+  "tree": [
+    {
+      "path": ".env.example",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "81fdde772df4b50b8a23e7d1729c1e44287f25bf",
+      "size": 595,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/81fdde772df4b50b8a23e7d1729c1e44287f25bf"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "853032ebd283697e74eef92d804395dbee30b31f",
+      "size": 557,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/853032ebd283697e74eef92d804395dbee30b31f"
+    },
+    {
+      "path": "BUILD_INSTRUCTIONS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbb581bf9d6c46506a2ac02dce9d4da23c65a440",
+      "size": 5567,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/dbb581bf9d6c46506a2ac02dce9d4da23c65a440"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "78292340de4c3a6ac2258bf7e539639d044bfe7c",
+      "size": 15992,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/78292340de4c3a6ac2258bf7e539639d044bfe7c"
+    },
+    {
+      "path": "SETUP-VOSK.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a0c698e97ccf5dbed1ca122c4b78ef99b0f418fe",
+      "size": 4019,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/a0c698e97ccf5dbed1ca122c4b78ef99b0f418fe"
+    },
+    {
+      "path": "assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9aed276f6bac5658ecff1428d777f5555d4ee87f",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/9aed276f6bac5658ecff1428d777f5555d4ee87f"
+    },
+    {
+      "path": "assets/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5fab45efa9c0b5e7c1a256918ae906017e5709af",
+      "size": 2403,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/5fab45efa9c0b5e7c1a256918ae906017e5709af"
+    },
+    {
+      "path": "assets/chrome.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ec41e29e6aa513e2d910a006a68867000889198",
+      "size": 12811,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/7ec41e29e6aa513e2d910a006a68867000889198"
+    },
+    {
+      "path": "logs.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2cc6603744004f84f084f6406c42760ff33b5e0b",
+      "size": 4946,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/2cc6603744004f84f084f6406c42760ff33b5e0b"
+    },
+    {
+      "path": "notes.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9c08963d852caaab897256009a830683513deddf",
+      "size": 12695,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/9c08963d852caaab897256009a830683513deddf"
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1a227e490174240aa90ee3990de5699b8cffcd99",
+      "size": 165758,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/1a227e490174240aa90ee3990de5699b8cffcd99"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb508f71498f0e551cc9705868ac9538ba440acd",
+      "size": 1914,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/bb508f71498f0e551cc9705868ac9538ba440acd"
+    },
+    {
+      "path": "repomix-output.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c607e25f22e010b223ea1b4096ab98e0dd9913ad",
+      "size": 463148,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/c607e25f22e010b223ea1b4096ab98e0dd9913ad"
+    },
+    {
+      "path": "scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "045607968ca3e64206f40dc42acbff78a9101c7d",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/045607968ca3e64206f40dc42acbff78a9101c7d"
+    },
+    {
+      "path": "scripts/fetch-gemini-models.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e8f453ccdd91aa1115fac225f1ba32af39fa1939",
+      "size": 6707,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/e8f453ccdd91aa1115fac225f1ba32af39fa1939"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a26d7ef13875b4472e1aa4cf3df7fbb2322ee707",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/a26d7ef13875b4472e1aa4cf3df7fbb2322ee707"
+    },
+    {
+      "path": "src/bootstrap",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "995f87a93f16db38e7bafad033c13e4926391b0a",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/995f87a93f16db38e7bafad033c13e4926391b0a"
+    },
+    {
+      "path": "src/bootstrap/environment.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f4173f44e42234b8c36a38ec58ac3b4b101ccef6",
+      "size": 5166,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/f4173f44e42234b8c36a38ec58ac3b4b101ccef6"
+    },
+    {
+      "path": "src/config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "85d45ad1c6a7c262e50d2f5b3c27230c1a25969e",
+      "size": 8171,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/85d45ad1c6a7c262e50d2f5b3c27230c1a25969e"
+    },
+    {
+      "path": "src/main-process",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "14e96ee7ea995776aaba0e3771d3da59f6b58bec",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/14e96ee7ea995776aaba0e3771d3da59f6b58bec"
+    },
+    {
+      "path": "src/main-process/features",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "60fca1e0940797b23b1e6f84ebb3710b0902eb1d",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/60fca1e0940797b23b1e6f84ebb3710b0902eb1d"
+    },
+    {
+      "path": "src/main-process/features/assistant",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a84e661bbcd07bcf724ace90a645922d337a0bbe",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/a84e661bbcd07bcf724ace90a645922d337a0bbe"
+    },
+    {
+      "path": "src/main-process/features/assistant/gemini-runtime.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8e5f8e6caf321fc58eab58d7914f7eebeddeef1c",
+      "size": 12469,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/8e5f8e6caf321fc58eab58d7914f7eebeddeef1c"
+    },
+    {
+      "path": "src/main-process/features/assistant/ipc.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fbf282f8570911adb653c5432e3918959e485cc6",
+      "size": 17118,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/fbf282f8570911adb653c5432e3918959e485cc6"
+    },
+    {
+      "path": "src/main-process/features/assistant/screenshot-manager.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0523cb35f3212c8ab6a91faf6a6d665e0a8f4f2f",
+      "size": 5338,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/0523cb35f3212c8ab6a91faf6a6d665e0a8f4f2f"
+    },
+    {
+      "path": "src/main-process/features/mobile-server",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "57d5fd3ec8c9cd20e0b39b3405837203961e0b3a",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/57d5fd3ec8c9cd20e0b39b3405837203961e0b3a"
+    },
+    {
+      "path": "src/main-process/features/mobile-server/mobile.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6a5a091568be917aac79d06b3bc84d07ee59d02",
+      "size": 24904,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/b6a5a091568be917aac79d06b3bc84d07ee59d02"
+    },
+    {
+      "path": "src/main-process/features/mobile-server/server.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3eceaea1724d335dc462848e4cf9fb6b316db610",
+      "size": 9229,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/3eceaea1724d335dc462848e4cf9fb6b316db610"
+    },
+    {
+      "path": "src/main-process/features/settings",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "18516e5444b7f80c53c368373161a9646aee6fc3",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/18516e5444b7f80c53c368373161a9646aee6fc3"
+    },
+    {
+      "path": "src/main-process/features/settings/ipc.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "399c5ff1ed8c6e39c5a0a7f85be65d6afa81bfdf",
+      "size": 5966,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/399c5ff1ed8c6e39c5a0a7f85be65d6afa81bfdf"
+    },
+    {
+      "path": "src/main-process/features/window",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "506831249ddd7f847eb3d0e82ef073d2442dc02d",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/506831249ddd7f847eb3d0e82ef073d2442dc02d"
+    },
+    {
+      "path": "src/main-process/features/window/window-constants.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5f489b80cfaaafb63bb81f450b04e5f99027153",
+      "size": 510,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/b5f489b80cfaaafb63bb81f450b04e5f99027153"
+    },
+    {
+      "path": "src/main-process/features/window/window-controller.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ff5747f2aab1b9858d2da22b272037274d8328f1",
+      "size": 13200,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/ff5747f2aab1b9858d2da22b272037274d8328f1"
+    },
+    {
+      "path": "src/main-process/shared",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "508bcdaa02694575828cc367b56f80ecd87f1a7a",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/508bcdaa02694575828cc367b56f80ecd87f1a7a"
+    },
+    {
+      "path": "src/main-process/shared/safe-send.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2f1d1f98d9f7877b62316673b2f329c5738bc9de",
+      "size": 846,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/2f1d1f98d9f7877b62316673b2f329c5738bc9de"
+    },
+    {
+      "path": "src/main-process/start-application.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7f3757515ddce88e78bd66a599f0dfb1b27c0788",
+      "size": 11154,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/7f3757515ddce88e78bd66a599f0dfb1b27c0788"
+    },
+    {
+      "path": "src/main-process/startup-logging.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "55df88f718150af72d44db9a358a10bbe226533b",
+      "size": 1799,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/55df88f718150af72d44db9a358a10bbe226533b"
+    },
+    {
+      "path": "src/main.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9b65f1b2b38fde7fa1472f73601019e056a9fc93",
+      "size": 189,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/9b65f1b2b38fde7fa1472f73601019e056a9fc93"
+    },
+    {
+      "path": "src/services",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "00f0007d7665a2f233a1e99cb8d06c58bb64a6ac",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/00f0007d7665a2f233a1e99cb8d06c58bb64a6ac"
+    },
+    {
+      "path": "src/services/ai",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "dc48404af9a643761e67824386fd9928c41dbf06",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/dc48404af9a643761e67824386fd9928c41dbf06"
+    },
+    {
+      "path": "src/services/ai/gemini-service.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67df39b29c1c6461e71a4ddbc277bfaeb6a8e234",
+      "size": 13982,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/67df39b29c1c6461e71a4ddbc277bfaeb6a8e234"
+    },
+    {
+      "path": "src/services/ai/ollama-service.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9c1ba359a77383bbbb94c7c7d64aaab06dfa35bb",
+      "size": 14299,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/9c1ba359a77383bbbb94c7c7d64aaab06dfa35bb"
+    },
+    {
+      "path": "src/services/ai/prompts.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f22d896c6dd8c45ca1d18288c041eb30c183566f",
+      "size": 18841,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/f22d896c6dd8c45ca1d18288c041eb30c183566f"
+    },
+    {
+      "path": "src/services/assembly-ai",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "30b0b10fcaeb25affb41d06df05422b250677e4a",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/30b0b10fcaeb25affb41d06df05422b250677e4a"
+    },
+    {
+      "path": "src/services/assembly-ai/ipc.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3ab5387bd3c84fbc87c975390541e3c155e87f5a",
+      "size": 1198,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/3ab5387bd3c84fbc87c975390541e3c155e87f5a"
+    },
+    {
+      "path": "src/services/assembly-ai/service.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aba1a134d4bf52144f7ce505656f46e5404910b2",
+      "size": 17315,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/aba1a134d4bf52144f7ce505656f46e5404910b2"
+    },
+    {
+      "path": "src/services/assembly-ai/stt-history.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "030c4f0c5f1658794ab10db5c1290500a60ca176",
+      "size": 4687,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/030c4f0c5f1658794ab10db5c1290500a60ca176"
+    },
+    {
+      "path": "src/services/state",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0fa992165e20c3eae090ea5e3779136d91b6afaf",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/0fa992165e20c3eae090ea5e3779136d91b6afaf"
+    },
+    {
+      "path": "src/services/state/app-state.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68f9839686a4f78227830695574a4c291f4ec030",
+      "size": 4296,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/68f9839686a4f78227830695574a4c291f4ec030"
+    },
+    {
+      "path": "src/windows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4650f716d343651c5fefb3dd4b51de44bc0362de",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/4650f716d343651c5fefb3dd4b51de44bc0362de"
+    },
+    {
+      "path": "src/windows/assistant",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "72d3f738732df0736b0c39bd69d514328a2c18bc",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/72d3f738732df0736b0c39bd69d514328a2c18bc"
+    },
+    {
+      "path": "src/windows/assistant/pcm-capture-worklet.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "603a95b23cfdda6a0d98043645e81212a44bf75c",
+      "size": 1328,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/603a95b23cfdda6a0d98043645e81212a44bf75c"
+    },
+    {
+      "path": "src/windows/assistant/preload.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9e621f219d4301a266363bc17e40daa5a84a177c",
+      "size": 737,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/9e621f219d4301a266363bc17e40daa5a84a177c"
+    },
+    {
+      "path": "src/windows/assistant/preload",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c7a81ed087b295073f978855f7bdfddf3884e06b",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/c7a81ed087b295073f978855f7bdfddf3884e06b"
+    },
+    {
+      "path": "src/windows/assistant/preload/actions.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f89c99a041b5f527a32fc01688fba45dabb1fe89",
+      "size": 5706,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/f89c99a041b5f527a32fc01688fba45dabb1fe89"
+    },
+    {
+      "path": "src/windows/assistant/preload/create-electron-api.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "046d7dd21e9ca9ca0767fe1e43bd187a0a393c90",
+      "size": 480,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/046d7dd21e9ca9ca0767fe1e43bd187a0a393c90"
+    },
+    {
+      "path": "src/windows/assistant/preload/helpers.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f02c202293b86ed137928445b867d3bdf4a0acbc",
+      "size": 1005,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/f02c202293b86ed137928445b867d3bdf4a0acbc"
+    },
+    {
+      "path": "src/windows/assistant/preload/listeners.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53c945943d0890718ae5d9821d18de37a08dcd06",
+      "size": 3019,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/53c945943d0890718ae5d9821d18de37a08dcd06"
+    },
+    {
+      "path": "src/windows/assistant/renderer-globals.d.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "de844e47ad5e3d3293a33dea79b9723be83728b2",
+      "size": 78,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/de844e47ad5e3d3293a33dea79b9723be83728b2"
+    },
+    {
+      "path": "src/windows/assistant/renderer.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d7980eee48df5eebf09cecf9899c05959edf282d",
+      "size": 16195,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/d7980eee48df5eebf09cecf9899c05959edf282d"
+    },
+    {
+      "path": "src/windows/assistant/renderer.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2089d0912a58f3223c1163c28f5f885f0cbc5114",
+      "size": 39790,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/2089d0912a58f3223c1163c28f5f885f0cbc5114"
+    },
+    {
+      "path": "src/windows/assistant/renderer",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "bf98a80f8fd43bff25c3a563c2ad198f9e5f9f72",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/bf98a80f8fd43bff25c3a563c2ad198f9e5f9f72"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4ead1851f3b17ef982f29fe18166d00e52e8e793",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/4ead1851f3b17ef982f29fe18166d00e52e8e793"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/ai-context",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "138c7fc7825c42b565a83953d913e0ecd23ab88c",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/138c7fc7825c42b565a83953d913e0ecd23ab88c"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/ai-context/context-bundle.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "640c1c281c4c7e7611cb4af765e53f8b37d78a4a",
+      "size": 2064,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/640c1c281c4c7e7611cb4af765e53f8b37d78a4a"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/ai-context/message-store.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "581927387a00d74a3cba7dd256a325ca69b7da7b",
+      "size": 1799,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/581927387a00d74a3cba7dd256a325ca69b7da7b"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/ai-context/message-types.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cd286a78dbb5b26ed15841ae6fc17bd41a5a3265",
+      "size": 1679,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/cd286a78dbb5b26ed15841ae6fc17bd41a5a3265"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/ai-context/toggle-ui.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "89e4a43f479840932cdcbfff00f9bf85b8d83e1c",
+      "size": 822,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/89e4a43f479840932cdcbfff00f9bf85b8d83e1c"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/assembly-ai",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "f85b16225a1a431ea48bbec122dd6378e4e6ca03",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/f85b16225a1a431ea48bbec122dd6378e4e6ca03"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/assembly-ai/audio-pipeline.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d72935818ea3ec2b864e042e03ad8bc29b690470",
+      "size": 7768,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/d72935818ea3ec2b864e042e03ad8bc29b690470"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/assembly-ai/source-state.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a10cfea01b571442fd9f52fb573a3cf69a86012c",
+      "size": 1858,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/a10cfea01b571442fd9f52fb573a3cf69a86012c"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/assembly-ai/transcript-buffer.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "64876f8404e3caa6efedce74087781bcabea0bf4",
+      "size": 3662,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/64876f8404e3caa6efedce74087781bcabea0bf4"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/chat",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b5386fcc286d80b224ff7a26549f54d3c1f12745",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/b5386fcc286d80b224ff7a26549f54d3c1f12745"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/chat/chat-ui-manager.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "847de1d85e0458749eea80b759534b059ebf0e6c",
+      "size": 7465,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/847de1d85e0458749eea80b759534b059ebf0e6c"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/layout",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1406e9750739101361ffbfa34aca795b8e50925c",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/1406e9750739101361ffbfa34aca795b8e50925c"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/layout/window-adjustments.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d40832fb7f07fedd5b7bd26ce617da5388a81054",
+      "size": 5442,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/d40832fb7f07fedd5b7bd26ce617da5388a81054"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/listeners",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "de2b76eb4942403749679d6ff49934533df30c14",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/de2b76eb4942403749679d6ff49934533df30c14"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/listeners/event-listeners.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "002ff6a1570bbdc95ae97146b1576807b8b2cdd7",
+      "size": 8849,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/002ff6a1570bbdc95ae97146b1576807b8b2cdd7"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/listeners/ipc-listeners.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "47d56941d43718abadbcf7909e5e5d8d81732597",
+      "size": 5090,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/47d56941d43718abadbcf7909e5e5d8d81732597"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/settings",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9a5fe9addb05124912b9095fd58950b8389cd8a7",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/9a5fe9addb05124912b9095fd58950b8389cd8a7"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/settings/settings-panel-manager.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a5863d0b3de1f5b1683fc9f67ee7faae5bfbb342",
+      "size": 13314,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/a5863d0b3de1f5b1683fc9f67ee7faae5bfbb342"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/settings/shortcut-manager.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "739175e25d45fad0c8abb17e2b345242c65fcecd",
+      "size": 10817,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/739175e25d45fad0c8abb17e2b345242c65fcecd"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/transcription",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e297d66faf423aa9d9ba1b5e28c36f06d9b0686f",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/e297d66faf423aa9d9ba1b5e28c36f06d9b0686f"
+    },
+    {
+      "path": "src/windows/assistant/renderer/features/transcription/transcription-manager.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ce61b8114c88784d3232b8deb79eab42c19fa04c",
+      "size": 24036,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/ce61b8114c88784d3232b8deb79eab42c19fa04c"
+    },
+    {
+      "path": "src/windows/assistant/styles.css",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b68cf38a8e8b294b4312072169dcd7d5137d60c4",
+      "size": 46835,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/b68cf38a8e8b294b4312072169dcd7d5137d60c4"
+    },
+    {
+      "path": "src/windows/assistant/window.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1add210e7d0b2744865a54300aaaf27d5ad918db",
+      "size": 5440,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/1add210e7d0b2744865a54300aaaf27d5ad918db"
+    },
+    {
+      "path": "src/windows/legacy",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "20226ed62381f5f84375a14c8fd4af266e13b7af",
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/trees/20226ed62381f5f84375a14c8fd4af266e13b7af"
+    },
+    {
+      "path": "src/windows/legacy/renderer-webspeech-broken.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "46f109e63ff5f6eaa838a185c01c9ff8f4d79556",
+      "size": 21792,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/46f109e63ff5f6eaa838a185c01c9ff8f4d79556"
+    },
+    {
+      "path": "src/windows/legacy/renderer-whisper-backup.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5eba0dd5ddd13e926b8bc7409efd57f7736e8c85",
+      "size": 37011,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/5eba0dd5ddd13e926b8bc7409efd57f7736e8c85"
+    },
+    {
+      "path": "src/windows/legacy/whisper-worker.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9dc161b98bfe57691f3a7bed8d1ac04af7bf76a1",
+      "size": 4856,
+      "url": "https://api.github.com/repos/shubhamshnd/Open-Cluely/git/blobs/9dc161b98bfe57691f3a7bed8d1ac04af7bf76a1"
+    }
+  ],
+  "truncated": false
+}

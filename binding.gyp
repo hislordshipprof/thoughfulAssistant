@@ -9,7 +9,8 @@
         "src/native/src/window_stealth.cpp",
         "src/native/src/raw_input.cpp",
         "src/native/src/wasapi_capture.cpp",
-        "src/native/src/utils.cpp"
+        "src/native/src/utils.cpp",
+        "src/native/src/screenshot.cpp"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
@@ -26,7 +27,9 @@
               "-lavrt",
               "-luser32",
               "-luuid",
-              "-lksuser"
+              "-lksuser",
+              "-lgdiplus",
+              "-lgdi32"
             ],
             "msvs_settings": {
               "VCCLCompilerTool": {

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keyboard Hook Test - Interview Assistant</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      color: #333;
+    }
+    h1 {
+      margin-top: 0;
+      color: #667eea;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+    .status {
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-weight: bold;
+      text-align: center;
+      font-size: 18px;
+    }
+    .waiting {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      color: #856404;
+    }
+    .blocked {
+      background: #d4edda;
+      border: 2px solid #28a745;
+      color: #155724;
+    }
+    .detected {
+      background: #f8d7da;
+      border: 2px solid #dc3545;
+      color: #721c24;
+    }
+    .test-section {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .hotkey-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .hotkey {
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px;
+      transition: all 0.3s;
+    }
+    .hotkey.tested {
+      background: #d4edda;
+      border-color: #28a745;
+    }
+    .hotkey.failed {
+      background: #f8d7da;
+      border-color: #dc3545;
+    }
+    .hotkey-name {
+      font-weight: bold;
+      color: #667eea;
+      margin-bottom: 5px;
+    }
+    .hotkey-combo {
+      font-family: monospace;
+      font-size: 14px;
+      color: #666;
+    }
+    #log {
+      background: #1e1e1e;
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      padding: 15px;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 20px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .log-entry {
+      margin: 5px 0;
+      padding: 5px;
+      border-left: 3px solid #00ff00;
+      padding-left: 10px;
+    }
+    .log-blocked {
+      border-left-color: #28a745;
+      color: #00ff00;
+    }
+    .log-detected {
+      border-left-color: #dc3545;
+      color: #ff4444;
+    }
+    .instructions {
+      background: #e7f3ff;
+      border: 2px solid #2196F3;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .instructions h3 {
+      margin-top: 0;
+      color: #2196F3;
+    }
+    .instructions ol {
+      margin: 10px 0;
+      padding-left: 25px;
+    }
+    .instructions li {
+      margin: 8px 0;
+    }
+    .clear-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+    .clear-btn:hover {
+      background: #5568d3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Keyboard Hook Test - Interview Assistant</h1>
+
+    <div class="instructions">
+      <h3>📋 Testing Instructions</h3>
+      <ol>
+        <li><strong>Start your Interview Assistant app</strong> (the Electron overlay)</li>
+        <li><strong>Keep this browser window focused</strong></li>
+        <li><strong>Press each hotkey combination below</strong></li>
+        <li><strong>Check the results:</strong>
+          <ul>
+            <li>🟢 <strong>Green = BLOCKED</strong> - Hook is working! Browser didn't see the key.</li>
+            <li>🔴 <strong>Red = DETECTED</strong> - Hook failed! Browser received the key.</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+
+    <div id="status" class="status waiting">
+      ⏳ Waiting for keyboard input... Click here and press a hotkey!
+    </div>
+
+    <div class="test-section">
+      <h3>🎯 Hotkeys to Test</h3>
+      <p>Try pressing each of these combinations. They should be <strong>BLOCKED</strong> (green) if the hook is working:</p>
+      <div class="hotkey-list">
+        <div class="hotkey" data-combo="ctrl+shift+a">
+          <div class="hotkey-name">Ask AI</div>
+          <div class="hotkey-combo">Ctrl+Shift+A</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+r">
+          <div class="hotkey-name">Toggle Recording</div>
+          <div class="hotkey-combo">Ctrl+Shift+R</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+s">
+          <div class="hotkey-name">Capture Screen</div>
+          <div class="hotkey-combo">Ctrl+Shift+S</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+w">
+          <div class="hotkey-name">Typing Mode</div>
+          <div class="hotkey-combo">Ctrl+Shift+W</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+i">
+          <div class="hotkey-name">Toggle Interact</div>
+          <div class="hotkey-combo">Ctrl+Shift+I</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+n">
+          <div class="hotkey-name">Reset All</div>
+          <div class="hotkey-combo">Ctrl+Shift+N</div>
+        </div>
+        <div class="hotkey" data-combo="ctrl+shift+h">
+          <div class="hotkey-name">Toggle Overlay</div>
+          <div class="hotkey-combo">Ctrl+Shift+H</div>
+        </div>
+        <div class="hotkey" data-combo="escape">
+          <div class="hotkey-name">Cancel Stream</div>
+          <div class="hotkey-combo">Escape</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3>📊 Event Log <button class="clear-btn" onclick="clearLog()">Clear Log</button></h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const status = document.getElementById('status');
+    let testedKeys = new Set();
+
+    function addLog(message, isBlocked) {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${isBlocked ? 'log-blocked' : 'log-detected'}`;
+      const timestamp = new Date().toLocaleTimeString();
+      entry.textContent = `[${timestamp}] ${message}`;
+      log.insertBefore(entry, log.firstChild);
+    }
+
+    function updateStatus(detected) {
+      if (detected) {
+        status.className = 'status detected';
+        status.textContent = '🔴 DETECTED - Browser received the key! Hook may not be working.';
+      } else {
+        status.className = 'status blocked';
+        status.textContent = '🟢 BLOCKED - Hook is working! Browser did not receive the key.';
+      }
+    }
+
+    function getComboString(e) {
+      const parts = [];
+      if (e.ctrlKey) parts.push('ctrl');
+      if (e.shiftKey) parts.push('shift');
+      if (e.altKey) parts.push('alt');
+      if (e.metaKey) parts.push('meta');
+
+      let key = e.key.toLowerCase();
+      if (!['control', 'shift', 'alt', 'meta'].includes(key)) {
+        parts.push(key);
+      }
+
+      return parts.join('+');
+    }
+
+    function markHotkey(combo, blocked) {
+      const element = document.querySelector(`.hotkey[data-combo="${combo}"]`);
+      if (element) {
+        element.className = `hotkey ${blocked ? 'tested' : 'failed'}`;
+      }
+    }
+
+    // Listen for ALL keyboard events
+    document.addEventListener('keydown', (e) => {
+      const combo = getComboString(e);
+      const key = e.key;
+      const ctrl = e.ctrlKey;
+      const shift = e.shiftKey;
+      const alt = e.altKey;
+
+      // Check if this is one of the app's hotkeys
+      const isAppHotkey =
+        (ctrl && shift && key.toLowerCase() === 'a') ||
+        (ctrl && shift && key.toLowerCase() === 'r') ||
+        (ctrl && shift && key.toLowerCase() === 's') ||
+        (ctrl && shift && key.toLowerCase() === 'w') ||
+        (ctrl && shift && key.toLowerCase() === 'i') ||
+        (ctrl && shift && key.toLowerCase() === 'n') ||
+        (ctrl && shift && key.toLowerCase() === 'h') ||
+        (ctrl && shift && key.toLowerCase() === 'q') ||
+        (key.toLowerCase() === 'escape' && !ctrl && !shift && !alt);
+
+      if (isAppHotkey) {
+        // This key SHOULD have been blocked by the hook
+        addLog(`❌ DETECTED: ${combo.toUpperCase()} - Browser received this key!`, false);
+        updateStatus(true);
+        markHotkey(combo, false);
+      } else {
+        // Normal key - not an app hotkey
+        addLog(`ℹ️ Normal key: ${combo.toUpperCase()} (not an app hotkey)`, true);
+      }
+
+      testedKeys.add(combo);
+    }, true);
+
+    // Detect when focus returns to window
+    window.addEventListener('focus', () => {
+      addLog('ℹ️ Browser window focused - ready for testing', true);
+    });
+
+    function clearLog() {
+      log.innerHTML = '';
+      testedKeys.clear();
+      status.className = 'status waiting';
+      status.textContent = '⏳ Waiting for keyboard input...';
+      document.querySelectorAll('.hotkey').forEach(el => {
+        el.className = 'hotkey';
+      });
+      addLog('🔄 Log cleared - ready for new tests', true);
+    }
+
+    // Initial log entry
+    addLog('✅ Keyboard listener active - press any hotkey to test', true);
+    addLog('💡 TIP: Make sure your Interview Assistant app is running!', true);
+
+    // Make the status clickable to focus
+    status.addEventListener('click', () => {
+      status.focus();
+      addLog('ℹ️ Page focused - now try pressing hotkeys', true);
+    });
+  </script>
+</body>
+</html>

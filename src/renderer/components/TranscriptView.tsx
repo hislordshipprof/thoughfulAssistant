@@ -12,6 +12,8 @@ interface TranscriptViewProps {
   entries: TranscriptEntry[];
 }
 
+const TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+
 const TranscriptView: React.FC<TranscriptViewProps> = ({ entries }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +25,7 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ entries }) => {
 
   if (entries.length === 0) {
     return (
-      <div style={{ color: 'rgba(255,255,255,0.3)', padding: '12px', textAlign: 'center' }}>
+      <div className="transcript-empty">
         Start recording to see the live transcript.
       </div>
     );
@@ -37,7 +39,7 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ entries }) => {
             {entry.source === 'system' ? 'Interviewer' : 'You'}
           </span>
           <span className="transcript-time">
-            {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {new Date(entry.timestamp).toLocaleTimeString([], TIME_FORMAT)}
           </span>
           <div className="transcript-text">{entry.text}</div>
         </div>

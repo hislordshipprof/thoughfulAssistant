@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events';
-import { OcrEngine } from './ocr-engine';
 import { captureScreen, CapturedScreen } from './screen-capture';
 
 interface StealthToggle {
@@ -7,18 +6,19 @@ interface StealthToggle {
   applyStealthMode(): void;
 }
 
+/** Max screenshots held in memory — oldest is dropped when exceeded */
+const MAX_CAPTURES = 10;
+
 export class OcrManager extends EventEmitter {
-  private engine: OcrEngine;
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private intervalMs: number;
-  private lastText = '';
   private lastCapture: CapturedScreen | null = null;
   private captures: { image: CapturedScreen; text: string }[] = [];
   private stealthToggle: StealthToggle | null = null;
+  private isCapturing = false;
 
   constructor(intervalSeconds: number = 30) {
     super();
-    this.engine = new OcrEngine();
     this.intervalMs = intervalSeconds * 1000;
   }
 
@@ -27,7 +27,7 @@ export class OcrManager extends EventEmitter {
   }
 
   async initialize(): Promise<void> {
-    await this.engine.initialize();
+    // No OCR engine needed — vision models read images directly
     this.emit('ready');
   }
 
@@ -35,8 +35,9 @@ export class OcrManager extends EventEmitter {
     if (this.intervalHandle) return;
 
     this.intervalHandle = setInterval(async () => {
+      if (this.isCapturing) return; // Skip if previous capture is still in-flight
       try {
-        await this.captureAndRecognize();
+        await this.captureScreenOnly();
       } catch (err) {
         this.emit('error', err);
       }
@@ -52,60 +53,32 @@ export class OcrManager extends EventEmitter {
 
   /**
    * On-demand capture triggered by hotkey.
-   * Returns as soon as the screenshot is taken (fast).
-   * OCR runs in the background — text available later via getCombinedText().
+   * Screenshot only — vision model reads images directly.
+   * `provider` selects the per-provider downscale profile.
    */
-  async captureNow(): Promise<void> {
-    await this.captureWithOcrPromise();
+  async captureNow(provider?: string): Promise<void> {
+    await this.captureScreenOnly(provider);
   }
 
   /**
-   * Capture screenshot (returns fast for thumbnail) and run OCR in background.
-   * Returns a promise that resolves when OCR completes, so callers can optionally await it.
+   * Capture screenshot only — no OCR processing.
+   * Used for vision model workflow where images are sent directly to AI.
+   * `provider` (anthropic|openai|groq) selects the per-provider downscale
+   * profile so the image matches each model's optimal vision-input spec.
    */
-  async captureWithOcrPromise(): Promise<string> {
-    // Phase 1: Capture screenshot (fast ~100ms)
-    const captured = await captureScreen();
-    this.lastCapture = captured;
-
-    // Store immediately with empty text — image is available for preview
-    const captureIndex = this.captures.length;
-    this.captures.push({ image: captured, text: '' });
-    console.log(`[ocr] Capture #${this.captures.length} image ready, starting OCR in background...`);
-
-    // Phase 2: OCR in background — return the promise so callers can await if needed
-    return this.engine.recognize(captured.ocrDataUrl).then(text => {
-      if (captureIndex < this.captures.length) {
-        this.captures[captureIndex].text = text;
-        this.lastText = text;
+  async captureScreenOnly(provider?: string): Promise<void> {
+    this.isCapturing = true;
+    try {
+      const captured = await captureScreen(undefined, undefined, undefined, provider);
+      this.lastCapture = captured;
+      if (this.captures.length >= MAX_CAPTURES) {
+        this.captures.shift();
       }
-      console.log(`[ocr] Capture #${captureIndex + 1} OCR complete (${text.length} chars)`);
-      this.emit('ocr-result', { text, timestamp: captured.timestamp });
-      return text;
-    }).catch(err => {
-      console.error(`[ocr] OCR failed for capture #${captureIndex + 1}:`, err);
-      this.emit('error', err);
-      return '';
-    });
-  }
-
-  /** Full capture + OCR (blocking) — waits for OCR to complete before returning */
-  async captureAndRecognize(): Promise<string> {
-    const captured = await captureScreen();
-    this.lastCapture = captured;
-
-    const text = await this.engine.recognize(captured.ocrDataUrl);
-    this.lastText = text;
-
-    this.captures.push({ image: captured, text });
-    console.log(`[ocr] Capture #${this.captures.length} stored (${text.length} chars)`);
-
-    this.emit('ocr-result', { text, timestamp: captured.timestamp });
-    return text;
-  }
-
-  getLastText(): string {
-    return this.lastText;
+      this.captures.push({ image: captured, text: '' });
+      console.log(`[capture] Screenshot #${this.captures.length} ready (vision mode, provider=${provider ?? 'default'})`);
+    } finally {
+      this.isCapturing = false;
+    }
   }
 
   getLastCapture(): CapturedScreen | null {
@@ -117,25 +90,21 @@ export class OcrManager extends EventEmitter {
   }
 
   getCombinedText(): string {
-    if (this.captures.length === 0) return '';
-    if (this.captures.length === 1) return this.captures[0].text;
-    return this.captures
-      .map((c, i) => `[Screenshot ${i + 1}]\n${c.text}`)
-      .join('\n\n');
+    // Legacy — no longer used with vision models
+    return '';
   }
 
   removeCapture(index: number): void {
     if (index >= 0 && index < this.captures.length) {
       this.captures.splice(index, 1);
-      console.log(`[ocr] Removed capture #${index + 1}, ${this.captures.length} remaining`);
+      console.log(`[capture] Removed screenshot #${index + 1}, ${this.captures.length} remaining`);
     }
   }
 
   clearCaptures(): void {
     this.captures = [];
     this.lastCapture = null;
-    this.lastText = '';
-    console.log('[ocr] All captures cleared');
+    console.log('[capture] All screenshots cleared');
   }
 
   getCaptureCount(): number {
@@ -152,6 +121,5 @@ export class OcrManager extends EventEmitter {
 
   async terminate(): Promise<void> {
     this.stopPeriodicCapture();
-    await this.engine.terminate();
   }
 }

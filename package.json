@@ -1,7 +1,7 @@
 {
-  "name": "interview-overlay",
-  "version": "1.0.0",
-  "description": "Invisible AI-powered interview assistant overlay",
+  "name": "audio-device-helper",
+  "version": "1.1.0",
+  "description": "Audio device configuration helper for Windows",
   "main": "out/main/main.js",
   "private": true,
   "scripts": {
@@ -14,13 +14,19 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "electron-store": "^8.2.0",
+    "katex": "^0.16.45",
+    "mammoth": "^1.12.0",
+    "mermaid": "^11.13.0",
     "node-addon-api": "^8.3.1",
     "openai": "^4.77.0",
+    "pdf-parse": "^2.4.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "react-syntax-highlighter": "^15.6.1",
-    "tesseract.js": "^5.1.1",
+    "rehype-katex": "^7.0.1",
+    "remark-breaks": "^4.0.0",
+    "remark-math": "^6.0.0",
     "ws": "^8.18.0",
     "zod": "^3.24.1"
   },

@@ -16,24 +16,31 @@ export class TrayManager {
       icon = nativeImage.createFromPath(
         path.join(__dirname, '../../assets/icons/tray-icon.ico')
       );
+      if (icon.isEmpty()) throw new Error('Icon file empty or not found');
     } catch {
-      // Create a minimal 16x16 icon
-      icon = nativeImage.createEmpty();
+      // Create a minimal 16x16 blue square as fallback
+      icon = nativeImage.createFromBuffer(
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVQ4T2N0' +
+          'TKn5n4EKgJGYIINmMFADC9UCYQSMIDZ1XDC4woCqYUCrfEDNMKBmPgAAo3gZ' +
+          'Ef2XHIAAAAAASUVORK5CYII=',
+          'base64'
+        ),
+        { width: 16, height: 16 }
+      );
     }
 
     this.tray = new Tray(icon);
-    this.tray.setToolTip('Interview Overlay');
+    this.tray.setToolTip('Audio Device Helper');
 
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Toggle Overlay',
-        click: callbacks.onToggleOverlay,
-        accelerator: 'Ctrl+Shift+H'
+        click: callbacks.onToggleOverlay
       },
       {
         label: 'Toggle Recording',
-        click: callbacks.onToggleRecording,
-        accelerator: 'Ctrl+Shift+R'
+        click: callbacks.onToggleRecording
       },
       { type: 'separator' },
       {
@@ -66,7 +73,7 @@ export class TrayManager {
 
   setRecordingState(isRecording: boolean): void {
     this.tray?.setToolTip(
-      isRecording ? 'Interview Overlay (Recording)' : 'Interview Overlay'
+      isRecording ? 'Audio Device Helper (Recording)' : 'Audio Device Helper'
     );
   }
 }

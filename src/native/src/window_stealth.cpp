@@ -32,19 +32,29 @@ static HWND ExtractHwnd(const Napi::CallbackInfo& info) {
     return nullptr;
   }
 
+  HWND hwnd = nullptr;
+
   // Accept Buffer (raw HWND pointer bytes)
   if (info[0].IsBuffer()) {
     auto buffer = info[0].As<Napi::Buffer<uint8_t>>();
-    return Utils::GetHwndFromBuffer(buffer);
+    hwnd = Utils::GetHwndFromBuffer(buffer);
   }
-
   // Accept Number (HWND as number — from Electron getNativeWindowHandle)
-  if (info[0].IsNumber()) {
-    return reinterpret_cast<HWND>(static_cast<uintptr_t>(info[0].As<Napi::Number>().Int64Value()));
+  else if (info[0].IsNumber()) {
+    hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(info[0].As<Napi::Number>().Int64Value()));
+  }
+  else {
+    Napi::TypeError::New(env, "Expected Buffer or Number for HWND").ThrowAsJavaScriptException();
+    return nullptr;
   }
 
-  Napi::TypeError::New(env, "Expected Buffer or Number for HWND").ThrowAsJavaScriptException();
-  return nullptr;
+  // Validate that the HWND refers to an existing window
+  if (hwnd && !IsWindow(hwnd)) {
+    Napi::Error::New(env, "Invalid or destroyed HWND").ThrowAsJavaScriptException();
+    return nullptr;
+  }
+
+  return hwnd;
 }
 
 Napi::Value ApplyStealthMode(const Napi::CallbackInfo& info) {

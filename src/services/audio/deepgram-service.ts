@@ -75,8 +75,9 @@ export class DeepgramService extends EventEmitter {
         conn.reconnectTimer = null;
       }
       if (conn.ws) {
-        // Send close message per Deepgram protocol
         if (conn.ws.readyState === WebSocket.OPEN) {
+          // Send empty audio to flush Deepgram's internal buffer for pending transcriptions
+          conn.ws.send(new Uint8Array(0));
           conn.ws.send(JSON.stringify({ type: 'CloseStream' }));
         }
         conn.ws.close();
@@ -130,6 +131,15 @@ export class DeepgramService extends EventEmitter {
     });
 
     conn.ws.on('open', () => {
+      // Guard: if stop() was called while the connection was in-flight, tear it down immediately
+      if (this.stopped) {
+        console.log(`[deepgram:${source}] Connected after stop() — closing zombie connection`);
+        conn.ws?.close();
+        conn.ws = null;
+        conn.isConnected = false;
+        return;
+      }
+
       conn.isConnected = true;
       conn.reconnectAttempts = 0;
       console.log(`[deepgram:${source}] Connected`);
@@ -148,8 +158,8 @@ export class DeepgramService extends EventEmitter {
       try {
         const msg = JSON.parse(data.toString());
         this.handleMessage(msg, source);
-      } catch {
-        // Ignore parse errors
+      } catch (err) {
+        console.warn(`[deepgram:${source}] Failed to parse message:`, (err as Error).message);
       }
     });
 

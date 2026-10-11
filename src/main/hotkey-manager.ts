@@ -91,9 +91,10 @@ export class HotkeyManager extends EventEmitter {
 
     this.isRunning = started;
 
+    // Delay registration until the Win32 message loop has initialized
+    const HOTKEY_REGISTRATION_DELAY_MS = 200;
     if (started) {
-      // Give the message loop a moment to initialize, then register global hotkeys
-      setTimeout(() => this.setupGlobalHotkeys(), 200);
+      setTimeout(() => this.setupGlobalHotkeys(), HOTKEY_REGISTRATION_DELAY_MS);
     }
 
     return started;
