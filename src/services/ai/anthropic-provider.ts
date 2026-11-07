@@ -8,7 +8,7 @@ export class AnthropicProvider implements AiProvider {
   private model: string;
   private abortController: AbortController | null = null;
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-5-20250929') {
+  constructor(apiKey: string, model: string = 'claude-sonnet-5-5') {
     this.apiKey = apiKey;
     this.model = model;
     if (apiKey) {

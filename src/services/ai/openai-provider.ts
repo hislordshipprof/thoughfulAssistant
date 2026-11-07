@@ -8,7 +8,7 @@ export class OpenAiProvider implements AiProvider {
   private model: string;
   private abortController: AbortController | null = null;
 
-  constructor(apiKey: string, model: string = 'gpt-4o') {
+  constructor(apiKey: string, model: string = 'gpt-5') {
     this.apiKey = apiKey;
     this.model = model;
     if (apiKey) {

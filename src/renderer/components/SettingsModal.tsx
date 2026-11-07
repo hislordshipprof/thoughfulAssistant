@@ -104,8 +104,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.provider}
               onChange={e => update('ai', 'provider', e.target.value)}
             >
-              <option value="openai">OpenAI (GPT-4o)</option>
-              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai">OpenAI (GPT-5)</option>
+              <option value="anthropic">Anthropic (Claude 5)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -126,10 +126,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.openaiModel}
               onChange={e => update('ai', 'openaiModel', e.target.value)}
             >
-              <option value="gpt-4o">GPT-4o (Best Quality)</option>
-              <option value="gpt-4o-mini">GPT-4o Mini (Fast)</option>
-              <option value="gpt-4.1">GPT-4.1 (Latest)</option>
-              <option value="gpt-4.1-mini">GPT-4.1 Mini (Latest Fast)</option>
+              <option value="gpt-5">GPT-5 (Latest, Best Quality)</option>
+              <option value="gpt-5-mini">GPT-5 Mini (Latest, Fast)</option>
+              <option value="gpt-5-nano">GPT-5 Nano (Latest, Fastest)</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="o3">o3 (Reasoning)</option>
+              <option value="o3-mini">o3 Mini (Reasoning, Fast)</option>
             </select>
           </div>
           <div className="settings-field">
@@ -139,8 +144,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.anthropicModel}
               onChange={e => update('ai', 'anthropicModel', e.target.value)}
             >
-              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Best Quality)</option>
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+              <option value="claude-opus-5-5">Claude Opus 5.5 (Latest, Best Quality)</option>
+              <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (Latest, Balanced)</option>
+              <option value="claude-haiku-5-5">Claude Haiku 5.5 (Latest, Fast)</option>
+              <option value="claude-fable-5-1">Claude Fable 5.1 (Latest, Creative)</option>
+              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
             </select>
           </div>
           <div className="settings-field">
