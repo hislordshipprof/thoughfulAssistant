@@ -5,6 +5,7 @@
   "main": "out/main/main.js",
   "private": true,
   "scripts": {
+    "install": "node -e \"process.exit(0)\"",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

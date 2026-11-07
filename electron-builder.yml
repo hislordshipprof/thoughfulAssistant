@@ -9,11 +9,6 @@ files:
   - "!node_modules/**/*"
   - node_modules/electron-store/**/*
   - node_modules/node-addon-api/**/*
-extraResources:
-  - from: build/Release/
-    to: native/
-    filter:
-      - "*.node"
 
 win:
   target:
@@ -21,6 +16,11 @@ win:
       arch:
         - x64
   icon: assets/icons/app-icon.ico
+  extraResources:
+    - from: build/Release/
+      to: native/
+      filter:
+        - "*.node"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

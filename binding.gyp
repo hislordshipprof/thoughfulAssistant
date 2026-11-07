@@ -38,7 +38,7 @@
           }
         ],
         [
-          "OS=='mac'",
+          "OS=='mac' and '<!(echo $ENABLE_NATIVE_MAC)'=='1'",
           {
             "sources": [
               "src/native/src/mac/addon_mac.mm"
