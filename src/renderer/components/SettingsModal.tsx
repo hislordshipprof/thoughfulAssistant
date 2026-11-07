@@ -104,7 +104,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.provider}
               onChange={e => update('ai', 'provider', e.target.value)}
             >
-              <option value="openai">OpenAI (GPT-5)</option>
+              <option value="openai">OpenAI (GPT-6 Sol)</option>
               <option value="anthropic">Anthropic (Claude 5)</option>
             </select>
           </div>
@@ -126,9 +126,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.openaiModel}
               onChange={e => update('ai', 'openaiModel', e.target.value)}
             >
-              <option value="gpt-5">GPT-5 (Latest, Best Quality)</option>
-              <option value="gpt-5-mini">GPT-5 Mini (Latest, Fast)</option>
-              <option value="gpt-5-nano">GPT-5 Nano (Latest, Fastest)</option>
+              <option value="gpt-6.1-sol">GPT-6.1 Sol (Latest Balanced)</option>
+              <option value="gpt-6-astra">GPT-6 Astra (Best Quality, Reasoning)</option>
+              <option value="gpt-6-sol">GPT-6 Sol (Balanced)</option>
+              <option value="gpt-6-luna">GPT-6 Luna (Fast, Cheapest)</option>
+              <option value="gpt-5">GPT-5</option>
+              <option value="gpt-5-mini">GPT-5 Mini</option>
+              <option value="gpt-5-nano">GPT-5 Nano</option>
               <option value="gpt-4.1">GPT-4.1</option>
               <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
               <option value="gpt-4o">GPT-4o</option>

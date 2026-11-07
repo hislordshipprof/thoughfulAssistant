@@ -10,7 +10,7 @@ export const ConfigSchema = z.object({
     provider: z.enum(['openai', 'anthropic']).default('openai'),
     openaiKey: z.string().default(''),
     anthropicKey: z.string().default(''),
-    openaiModel: z.string().default('gpt-5'),
+    openaiModel: z.string().default('gpt-6.1-sol'),
     anthropicModel: z.string().default('claude-sonnet-5-5'),
     interviewMode: z.enum(['leetcode', 'general']).default('general')
   }),

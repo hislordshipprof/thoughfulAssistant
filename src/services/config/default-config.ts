@@ -5,7 +5,7 @@ export const defaultConfig: AppConfig = {
     provider: 'openai',
     openaiKey: '',
     anthropicKey: '',
-    openaiModel: 'gpt-5',
+    openaiModel: 'gpt-6.1-sol',
     anthropicModel: 'claude-sonnet-5-5'
   },
   audio: {
