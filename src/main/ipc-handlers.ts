@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, clipboard, desktopCapturer } from 'electron';
+import { ipcMain, BrowserWindow, clipboard } from 'electron';
 import { AiManager } from '../services/ai/ai-manager';
 import { AudioManager } from '../services/audio/audio-manager';
 import { OcrManager } from '../services/ocr/ocr-manager';
@@ -131,20 +131,6 @@ export function registerIpcHandlers(
   ipcMain.handle('window:focusable', (_event, enable: boolean) => {
     windowManager.setFocusableForInput(enable);
     return true;
-  });
-
-  // Provide the primary screen's capture source id so the renderer can try
-  // to capture system (loopback) audio on macOS via getUserMedia. Best-effort.
-  ipcMain.handle('mac-audio:getScreenSourceId', async () => {
-    try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 1, height: 1 }
-      });
-      return sources[0]?.id ?? null;
-    } catch {
-      return null;
-    }
   });
 
   // Session reset

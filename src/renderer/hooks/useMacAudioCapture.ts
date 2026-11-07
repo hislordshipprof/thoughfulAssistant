@@ -84,45 +84,32 @@ export function useMacAudioCapture(): void {
       }
     };
 
-    // Best-effort system-audio (loopback) via desktop capture. macOS 13+ only;
-    // silently no-ops if the platform/permissions don't allow it.
+    // System-audio (loopback) capture via getDisplayMedia. Electron's main
+    // process answers the request with the screen source + 'loopback' audio,
+    // which is captured through ScreenCaptureKit on macOS 13+ (no picker).
+    // We keep only the audio track. Non-fatal — mic capture is independent.
     const startLoopback = async () => {
       if (loopbackPipeRef.current) return;
       try {
-        const sourceId = await window.electronAPI.getScreenSourceId();
-        if (!sourceId) return;
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            // Electron desktop-capture loopback constraints.
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: sourceId
-            }
-          },
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: sourceId,
-              maxWidth: 1,
-              maxHeight: 1,
-              maxFrameRate: 1
-            }
-          }
-        } as any);
+        if (!navigator.mediaDevices?.getDisplayMedia) return;
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,   // required by the API; main supplies a 1x1 source
+          audio: true    // main maps this to 'loopback' (system audio)
+        });
 
-        // Drop the video track immediately — we only want the audio.
+        // Drop the video track immediately — we only want system audio.
         stream.getVideoTracks().forEach(t => t.stop());
 
         if (stream.getAudioTracks().length === 0) {
           stream.getTracks().forEach(t => t.stop());
-          console.log('[mac-audio] no system-audio track available (expected on some macOS versions)');
+          console.log('[mac-audio] no system-audio track (needs macOS 13+ / Screen Recording permission)');
           return;
         }
 
         loopbackPipeRef.current = makePcmPipe(stream, (buf) =>
           window.electronAPI.sendMacAudioLoopbackChunk(buf)
         );
-        console.log('[mac-audio] system-audio (loopback) capture started');
+        console.log('[mac-audio] system-audio (ScreenCaptureKit loopback) capture started');
       } catch (err) {
         // Non-fatal — mic capture continues.
         console.log('[mac-audio] system-audio capture unavailable:', (err as Error)?.message);

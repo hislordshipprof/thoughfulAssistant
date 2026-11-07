@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, desktopCapturer } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { WindowManager } from './window-manager';
@@ -150,6 +150,26 @@ async function createApp(): Promise<void> {
     }
     callback(false);
   });
+
+  // macOS system-audio capture. When the renderer calls getDisplayMedia,
+  // hand it the primary screen plus 'loopback' audio — Electron captures
+  // system audio through ScreenCaptureKit on macOS 13+ with no on-screen
+  // picker. We only want the audio; the renderer drops the video track.
+  if (process.platform === 'darwin') {
+    try {
+      mainWindow.webContents.session.setDisplayMediaRequestHandler((_request, callback) => {
+        desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+          .then((sources) => {
+            if (!sources.length) { callback({}); return; }
+            // 'loopback' = system audio via ScreenCaptureKit (Electron ≥30, macOS 13+)
+            callback({ video: sources[0], audio: 'loopback' } as any);
+          })
+          .catch(() => callback({}));
+      }, { useSystemPicker: false });
+    } catch (e: any) {
+      console.warn('[main] setDisplayMediaRequestHandler unavailable:', e?.message);
+    }
+  }
 
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
