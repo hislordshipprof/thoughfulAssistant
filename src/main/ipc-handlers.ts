@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, clipboard } from 'electron';
+import { ipcMain, BrowserWindow, clipboard, dialog } from 'electron';
+import { extractTextFromFile } from '../services/file/file-extractor';
 import { AiManager } from '../services/ai/ai-manager';
 import { AudioManager } from '../services/audio/audio-manager';
 import { OcrManager } from '../services/ocr/ocr-manager';
@@ -154,5 +155,35 @@ export function registerIpcHandlers(
   ipcMain.handle('clipboard:write', (_event, text: string) => {
     clipboard.writeText(text);
     return true;
+  });
+
+  // File upload — open a native picker and extract text (.txt/.md/.pdf/.docx)
+  ipcMain.handle('file:pick-and-extract', async (_event, purpose: string) => {
+    // The overlay is non-focusable; allow focus so the OS file dialog works.
+    windowManager.setFocusableForInput(true);
+    try {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: `Upload ${purpose === 'resume' ? 'Resume' : 'Job Description'}`,
+        filters: [
+          { name: 'Documents', extensions: ['txt', 'md', 'pdf', 'docx'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null;
+      }
+
+      const extraction = await extractTextFromFile(result.filePaths[0]);
+      if (extraction.success) {
+        console.log(`[ipc] file:pick-and-extract — ${extraction.fileName} → ${extraction.text.length} chars`);
+      } else {
+        console.error(`[ipc] file:pick-and-extract — ${extraction.fileName}: ${extraction.error}`);
+      }
+      return extraction;
+    } finally {
+      windowManager.setFocusableForInput(false);
+    }
   });
 }

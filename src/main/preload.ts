@@ -69,6 +69,11 @@ const electronAPI = {
   // Clipboard — write without stealing focus
   copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
 
+  // Resume / job-description file upload — native picker + text extraction
+  pickAndExtractFile: (purpose: 'resume' | 'jobDescription'): Promise<
+    { success: boolean; text: string; fileName: string; error?: string } | null
+  > => ipcRenderer.invoke('file:pick-and-extract', purpose),
+
   // Status
   onStatusUpdate: (callback: (status: any) => void) => {
     const handler = (_event: any, status: any) => callback(status);

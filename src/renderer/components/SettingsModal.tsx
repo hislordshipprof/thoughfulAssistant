@@ -39,6 +39,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const api = useIpc();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [jdUploading, setJdUploading] = useState(false);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [jdFileName, setJdFileName] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleFileUpload = async (purpose: 'resume' | 'jobDescription') => {
+    const setUploading = purpose === 'resume' ? setResumeUploading : setJdUploading;
+    const setFileName = purpose === 'resume' ? setResumeFileName : setJdFileName;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const result = await (window as any).electronAPI?.pickAndExtractFile?.(purpose);
+      if (!result) return; // dialog canceled
+      if (result.success) {
+        updateField(purpose, result.text);
+        setFileName(result.fileName);
+      } else {
+        setUploadError(`Failed to read ${result.fileName}: ${result.error}`);
+      }
+    } catch (err) {
+      setUploadError('File upload failed unexpectedly');
+      console.error('File upload error:', err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -115,8 +142,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
               value={settings.ai.interviewMode}
               onChange={e => update('ai', 'interviewMode', e.target.value)}
             >
-              <option value="general">General (Default)</option>
+              <option value="general">General — assessments, screen help, mixed (Default)</option>
+              <option value="behavioural">Behavioural — "tell me about yourself", STAR stories</option>
               <option value="leetcode">LeetCode / Coding Interview</option>
+              <option value="system_design">System Design Interview</option>
+              <option value="code_modification">Code Modification / Review</option>
             </select>
           </div>
           <div className="settings-field">
@@ -313,25 +343,58 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
         <div className="settings-section">
           <div className="settings-section-title">My Profile</div>
+          {uploadError && (
+            <div style={{ color: '#ff6b6b', fontSize: '11px', marginBottom: '8px' }}>{uploadError}</div>
+          )}
           <div className="settings-field">
-            <label className="settings-label">Resume / Background</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label className="settings-label" style={{ margin: 0 }}>Resume / Background</label>
+              <button
+                className="settings-select"
+                style={{ width: 'auto', padding: '2px 10px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => handleFileUpload('resume')}
+                disabled={resumeUploading}
+              >
+                {resumeUploading ? 'Reading…' : 'Upload File'}
+              </button>
+            </div>
+            {resumeFileName && (
+              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.55)', marginBottom: '4px' }}>
+                {resumeFileName} ({settings.resume.length.toLocaleString()} chars)
+              </div>
+            )}
             <textarea
               className="settings-input"
               rows={6}
               value={settings.resume}
-              onChange={e => updateField('resume', e.target.value)}
-              placeholder="Paste your resume or background info here. This will be used as context so the AI can answer questions about you."
+              onChange={e => { updateField('resume', e.target.value); if (!e.target.value) setResumeFileName(null); }}
+              placeholder="Paste your resume here or click Upload File (.txt, .md, .pdf, .docx). This will be used as context so the AI can answer questions about you."
               style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5 }}
             />
           </div>
           <div className="settings-field">
-            <label className="settings-label">Job Description</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label className="settings-label" style={{ margin: 0 }}>Job Description</label>
+              <button
+                className="settings-select"
+                style={{ width: 'auto', padding: '2px 10px', fontSize: '11px', cursor: 'pointer' }}
+                onClick={() => handleFileUpload('jobDescription')}
+                disabled={jdUploading}
+              >
+                {jdUploading ? 'Reading…' : 'Upload File'}
+              </button>
+            </div>
+            {jdFileName && (
+              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.55)', marginBottom: '4px' }}>
+                {jdFileName} ({settings.jobDescription.length.toLocaleString()} chars)
+              </div>
+            )}
             <textarea
               className="settings-input"
               rows={6}
               value={settings.jobDescription}
-              onChange={e => updateField('jobDescription', e.target.value)}
-              placeholder="Paste the job description here. Responses will be tailored to align your experience with this role."
+              onChange={e => { updateField('jobDescription', e.target.value); if (!e.target.value) setJdFileName(null); }}
+              placeholder="Paste the job description here or click Upload File (.txt, .md, .pdf, .docx). Responses will be tailored to align your experience with this role."
               style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1.5 }}
             />
           </div>
