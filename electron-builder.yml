@@ -4,6 +4,13 @@ copyright: Copyright © 2024
 directories:
   output: release
   buildResources: assets
+# Don't invoke @electron/rebuild from the packager — the explicit
+# `npm run rebuild` step handles the Windows native addon, and on macOS
+# the addon is intentionally skipped (stealth is delivered through
+# Electron APIs). Letting electron-builder also rebuild runs node-gyp
+# again and fails on toolchains without distutils / with new SDKs.
+npmRebuild: false
+buildDependenciesFromSource: false
 files:
   - out/**/*
   - "!node_modules/**/*"
