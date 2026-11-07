@@ -4,6 +4,7 @@ import SettingsModal from './components/SettingsModal';
 import { useStreamingResponse } from './hooks/useStreamingResponse';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useIpcEvent } from './hooks/useIpc';
+import { useMacAudioCapture } from './hooks/useMacAudioCapture';
 
 const App: React.FC = () => {
   const [interviewMode, setInterviewMode] = useState<string>('general');
@@ -18,6 +19,9 @@ const App: React.FC = () => {
   const [extraContext, setExtraContext] = useState('');
   const [isTypingMode, setIsTypingMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // macOS mic capture via Web Audio (no-op on Windows — main never fires the start event)
+  useMacAudioCapture();
 
   // Listen for transcript updates
   useIpcEvent('onTranscriptUpdate', useCallback((entries: any[]) => {

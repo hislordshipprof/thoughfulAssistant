@@ -99,12 +99,6 @@ async function createApp(): Promise<void> {
   trayManager = new TrayManager();
   aiManager = new AiManager();
 
-  const nativeAddon = windowManager.getNativeAddon();
-  audioManager = new AudioManager(nativeAddon || {
-    startCapture: () => false,
-    stopCapture: () => false,
-    isCapturing: () => false
-  });
   ocrManager = new OcrManager(config.ocr.intervalSeconds);
   ocrManager.setStealthToggle(windowManager);
 
@@ -114,7 +108,7 @@ async function createApp(): Promise<void> {
     aiManager.setActiveProvider(config.ai.provider);
   }
 
-  // Create overlay window
+  // Create overlay window (must exist before the Mac audio bridge needs it)
   const mainWindow = windowManager.createOverlayWindow({
     width: config.overlay.width,
     height: config.overlay.height,
@@ -123,8 +117,37 @@ async function createApp(): Promise<void> {
     opacity: config.overlay.opacity
   });
 
+  // Audio capture source — Windows uses the native WASAPI addon, macOS uses
+  // a renderer-side getUserMedia bridge over IPC.
+  const nativeAddon = windowManager.getNativeAddon();
+  let audioSource: any;
+  if (process.platform === 'darwin') {
+    const { MacAudioBridge } = await import('./mac-audio-bridge');
+    audioSource = new MacAudioBridge(mainWindow);
+    console.log('[main] Using MacAudioBridge for microphone capture');
+  } else if (nativeAddon) {
+    audioSource = nativeAddon;
+  } else {
+    audioSource = {
+      startCapture: () => false,
+      stopCapture: () => false,
+      isCapturing: () => false
+    };
+  }
+  audioManager = new AudioManager(audioSource);
+
   // Smart hit-test is the default — overlay UI elements are clickable,
   // transparent areas pass through. No binary click-through toggle needed.
+
+  // Grant microphone / media permissions requested by the renderer
+  // (macOS still shows the native OS prompt the first time).
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
 
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
