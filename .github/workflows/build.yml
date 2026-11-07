@@ -8,12 +8,8 @@ on:
       - 'claude/**'
     tags:
       - 'v*'
+  pull_request:
   workflow_dispatch:
-    inputs:
-      platforms:
-        description: 'Platforms to build (both | mac | win)'
-        required: false
-        default: 'both'
 
 jobs:
   build:
@@ -24,14 +20,10 @@ jobs:
           - os: windows-latest
             platform: win
             artifact: windows
-          - os: macos-14
+          - os: macos-latest
             platform: mac
             artifact: macos
     runs-on: ${{ matrix.os }}
-    if: |
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.platforms == 'both' ||
-      github.event.inputs.platforms == matrix.platform
 
     steps:
       - name: Checkout
@@ -52,19 +44,18 @@ jobs:
       - name: Rebuild native modules
         run: npm run rebuild
 
-      - name: Package (Windows)
+      - name: Package Windows
         if: matrix.platform == 'win'
         run: npx electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package (macOS)
+      - name: Package macOS
         if: matrix.platform == 'mac'
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Skip notarization in CI unless the signing secrets are provided.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
