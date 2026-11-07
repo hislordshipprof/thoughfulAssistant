@@ -58,7 +58,11 @@ export class WindowManager {
 
     // Cross-platform screen-capture hiding — Windows uses WDA_EXCLUDEFROMCAPTURE,
     // macOS uses NSWindowSharingNone. Electron maps setContentProtection to both.
+    // This alone is enough to hide the window from every screen-capture API,
+    // so flip the stealth flag now (the native addon call below only *adds*
+    // niceties like no-activate / all-Spaces behavior).
     this.mainWindow.setContentProtection(true);
+    this.isStealthActive = true;
 
     // Set always on top with highest level
     this.mainWindow.setAlwaysOnTop(true, 'screen-saver');

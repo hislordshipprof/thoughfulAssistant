@@ -133,6 +133,16 @@ async function createApp(): Promise<void> {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
+  // Push initial status once the renderer is ready, so the StatusBar
+  // reflects true state (STEALTH, provider, etc.) instead of its defaults.
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.send('status:update', {
+      isRecording: audioManager.isActive(),
+      aiProvider: aiManager.getActiveProviderName(),
+      isStealthActive: windowManager.isStealthEnabled()
+    });
+  });
+
   // Register IPC handlers
   registerIpcHandlers(mainWindow, aiManager, audioManager, ocrManager, configStore, windowManager);
 
