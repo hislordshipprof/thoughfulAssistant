@@ -1,0 +1,80 @@
+name: Build installers
+
+on:
+  push:
+    branches:
+      - main
+      - release
+      - 'claude/**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (both | mac | win)'
+        required: false
+        default: 'both'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact: windows
+          - os: macos-14
+            platform: mac
+            artifact: macos
+    runs-on: ${{ matrix.os }}
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.platforms == 'both' ||
+      github.event.inputs.platforms == matrix.platform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer + main
+        run: npm run build
+
+      - name: Rebuild native modules
+        run: npm run rebuild
+
+      - name: Package (Windows)
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (macOS)
+        if: matrix.platform == 'mac'
+        run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip notarization in CI unless the signing secrets are provided.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: InterviewOverlay-${{ matrix.artifact }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest*.yml
+          if-no-files-found: ignore
+          retention-days: 14

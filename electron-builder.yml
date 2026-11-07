@@ -10,10 +10,11 @@ files:
   - node_modules/electron-store/**/*
   - node_modules/node-addon-api/**/*
 extraResources:
-  - from: src/native/build/Release/
+  - from: build/Release/
     to: native/
     filter:
       - "*.node"
+
 win:
   target:
     - target: nsis
@@ -25,3 +26,37 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+
+mac:
+  category: public.app-category.productivity
+  icon: assets/icons/app-icon.icns
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: "Interview Overlay uses the microphone to transcribe your speech during interviews."
+    NSScreenCaptureUsageDescription: "Interview Overlay captures the screen to read interview questions with OCR."
+    NSAppleEventsUsageDescription: "Interview Overlay needs to interact with other apps to position its overlay window."
+    NSInputMonitoringUsageDescription: "Interview Overlay monitors keyboard input for global hotkeys."
+  notarize: false
+
+dmg:
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
