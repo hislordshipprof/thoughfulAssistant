@@ -6,7 +6,8 @@ export const defaultConfig: AppConfig = {
     openaiKey: '',
     anthropicKey: '',
     openaiModel: 'gpt-6.1-sol',
-    anthropicModel: 'claude-sonnet-5-5'
+    anthropicModel: 'claude-sonnet-5-5',
+    interviewMode: 'general'
   },
   audio: {
     transcriptionMode: 'deepgram',

@@ -23,15 +23,18 @@ export class MacAudioBridge {
   private window: BrowserWindow;
   private running = false;
   private micCb: ChunkCallback | null = null;
+  private loopbackCb: ChunkCallback | null = null;
   private handler: ((event: any, payload: { samples: ArrayBuffer }) => void) | null = null;
+  private loopbackHandler: ((event: any, payload: { samples: ArrayBuffer }) => void) | null = null;
 
   constructor(window: BrowserWindow) {
     this.window = window;
   }
 
-  startCapture(_loopbackCb: ChunkCallback, micCb: ChunkCallback): boolean {
+  startCapture(loopbackCb: ChunkCallback, micCb: ChunkCallback): boolean {
     if (this.running) return true;
     this.micCb = micCb;
+    this.loopbackCb = loopbackCb;
 
     this.handler = (_event, payload) => {
       if (!this.micCb || !payload?.samples) return;
@@ -44,6 +47,20 @@ export class MacAudioBridge {
       });
     };
     ipcMain.on('mac-audio:chunk', this.handler);
+
+    // System-audio (loopback) chunks — best-effort; only arrive when the
+    // renderer successfully opened a desktop audio stream.
+    this.loopbackHandler = (_event, payload) => {
+      if (!this.loopbackCb || !payload?.samples) return;
+      const buf = Buffer.from(payload.samples);
+      this.loopbackCb({
+        samples: buf,
+        sampleRate: 24000,
+        channels: 1,
+        isLoopback: true
+      });
+    };
+    ipcMain.on('mac-audio:loopback-chunk', this.loopbackHandler);
 
     // Ask the renderer to begin capturing. Fire-and-forget — the renderer
     // will report back via IPC with either audio chunks or an error.
@@ -60,7 +77,12 @@ export class MacAudioBridge {
       ipcMain.removeListener('mac-audio:chunk', this.handler);
       this.handler = null;
     }
+    if (this.loopbackHandler) {
+      ipcMain.removeListener('mac-audio:loopback-chunk', this.loopbackHandler);
+      this.loopbackHandler = null;
+    }
     this.micCb = null;
+    this.loopbackCb = null;
     this.running = false;
     console.log('[mac-audio] Bridge stopped');
     return true;

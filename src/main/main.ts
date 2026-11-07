@@ -142,7 +142,9 @@ async function createApp(): Promise<void> {
   // Grant microphone / media permissions requested by the renderer
   // (macOS still shows the native OS prompt the first time).
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
-    if (permission === 'media' || permission === 'microphone' || permission === 'audioCapture') {
+    // 'media' covers microphone + camera getUserMedia; 'display-capture'
+    // covers desktop/system-audio capture used by the Mac loopback path.
+    if (permission === 'media' || permission === 'display-capture') {
       callback(true);
       return;
     }
@@ -340,6 +342,13 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
 
     case 'cancelStream':
       aiManager.cancelStream();
+      // Escape also exits typing mode (Windows does this inside the native
+      // hook; replicate for the focusable-window path on macOS/other).
+      if (typingModeActive && !windowManager.getNativeAddon()?.setTypingMode) {
+        typingModeActive = false;
+        windowManager.setFocusableForInput(false);
+        mainWindow.webContents.send('typing:mode', false);
+      }
       mainWindow.webContents.send('hotkey:action', 'cancelStream');
       break;
 
@@ -352,7 +361,11 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       if (typingModeActive) {
         typingModeActive = false;
         const addon = windowManager.getNativeAddon();
-        addon?.setTypingMode?.(false);
+        if (addon?.setTypingMode) {
+          addon.setTypingMode(false);
+        } else {
+          windowManager.setFocusableForInput(false);
+        }
         mainWindow.webContents.send('typing:mode', false);
       }
       mainWindow.webContents.send('ocr:screenshots', []);
@@ -396,18 +409,21 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       break;
 
     case 'toggleTypingMode': {
-      console.log('[main] toggleTypingMode action received!');
       const addon = windowManager.getNativeAddon();
-      console.log('[main] addon:', !!addon, 'setTypingMode:', !!addon?.setTypingMode);
+      typingModeActive = !typingModeActive;
       if (addon?.setTypingMode) {
-        typingModeActive = !typingModeActive;
-        console.log('[main] Setting typing mode to:', typingModeActive);
+        // Windows: native LL hook swallows keystrokes globally and relays
+        // them as typing events.
         addon.setTypingMode(typingModeActive);
-        mainWindow.webContents.send('typing:mode', typingModeActive);
-        console.log('[main] Typing mode set and sent to renderer:', typingModeActive);
       } else {
-        console.warn('[main] WARNING: setTypingMode not available on addon');
+        // macOS/other: make the overlay focusable so keystrokes land in the
+        // overlay textarea (the renderer focuses it) instead of the app
+        // underneath. Keys never reach the app behind the overlay while it
+        // holds focus.
+        windowManager.setFocusableForInput(typingModeActive);
       }
+      mainWindow.webContents.send('typing:mode', typingModeActive);
+      console.log('[main] Typing mode:', typingModeActive, addon?.setTypingMode ? '(native)' : '(focusable)');
       break;
     }
   }

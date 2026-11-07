@@ -39,6 +39,20 @@ const MODIFIER_VKS = new Set([
   VK_LMENU, VK_RMENU,
 ]);
 
+// Bare single-modifier Command combos that macOS reserves system-wide.
+// Registering these globally would steal them from every other app, so we
+// remap them to a free combo that preserves our action. Keys match what
+// labelToAccelerator emits ("Ctrl" → "CommandOrControl", resolved to
+// Command on macOS).
+const RESERVED_MAC_ACCELERATORS: Record<string, string> = {
+  'CommandOrControl+H': 'CommandOrControl+Alt+H',   // macOS: Hide app
+  'CommandOrControl+M': 'CommandOrControl+Alt+M',   // macOS: Minimize
+  'CommandOrControl+W': 'CommandOrControl+Alt+W',   // macOS: Close window
+  'Command+H': 'Command+Alt+H',
+  'Command+M': 'Command+Alt+M',
+  'Command+W': 'Command+Alt+W'
+};
+
 interface KeyState {
   [vkCode: number]: boolean;
 }
@@ -155,10 +169,19 @@ export class HotkeyManager extends EventEmitter {
 
     for (const binding of this.bindings) {
       const label = this.bindingLabels.get(binding.name) || '';
-      const accelerator = labelToAccelerator(label);
+      let accelerator = labelToAccelerator(label);
       if (!accelerator) {
         console.warn(`[hotkey] Skipping ${binding.name} — no translatable label (${label})`);
         continue;
+      }
+
+      // Avoid hijacking reserved macOS system shortcuts globally. A bare
+      // Command+<key> for Hide/Minimize/etc. would be consumed for every
+      // app, not just ours. Remap to a free combo so the action still works.
+      const remapped = RESERVED_MAC_ACCELERATORS[accelerator];
+      if (remapped) {
+        console.log(`[hotkey] Remapping reserved macOS accelerator ${accelerator} → ${remapped} for ${binding.name}`);
+        accelerator = remapped;
       }
 
       try {

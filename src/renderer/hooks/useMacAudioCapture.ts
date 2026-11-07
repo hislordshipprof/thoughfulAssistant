@@ -1,34 +1,70 @@
-// Hook that drives microphone capture on macOS in response to main-process
+// Hook that drives audio capture on macOS in response to main-process
 // requests. Produces Int16 PCM mono at 24 kHz (what the Windows WASAPI
-// addon would produce) and ships each ~20 ms chunk to main via IPC.
+// addon would produce) and ships each chunk to main via IPC.
+//
+// Two independent streams:
+//   • Microphone (your voice) — always attempted. getUserMedia({audio}).
+//   • System audio (interviewer) — best-effort via desktopCapturer loopback
+//     (macOS 13+). If it fails, mic capture is unaffected.
 import { useEffect, useRef } from 'react';
 
-interface ElectronAPI {
-  onMacAudioStart: (cb: () => void) => () => void;
-  onMacAudioStop: (cb: () => void) => () => void;
-  sendMacAudioChunk: (samples: ArrayBuffer) => void;
+const TARGET_SAMPLE_RATE = 24000;
+
+interface PcmPipe {
+  ctx: AudioContext;
+  source: MediaStreamAudioSourceNode;
+  processor: ScriptProcessorNode;
+  stream: MediaStream;
 }
 
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
+// Wire a MediaStream through an AudioContext, resample to 24 kHz mono Int16,
+// and hand each chunk to `sink`.
+function makePcmPipe(stream: MediaStream, sink: (buf: ArrayBuffer) => void): PcmPipe {
+  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const source = ctx.createMediaStreamSource(stream);
+  const processor = ctx.createScriptProcessor(2048, 1, 1);
+  const ratio = TARGET_SAMPLE_RATE / ctx.sampleRate;
+
+  processor.onaudioprocess = (ev) => {
+    const input = ev.inputBuffer.getChannelData(0);
+    const outLen = Math.floor(input.length * ratio);
+    const out = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const srcIdx = Math.floor(i / ratio);
+      let s = input[srcIdx];
+      if (s > 1) s = 1;
+      else if (s < -1) s = -1;
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    sink(out.buffer);
+  };
+
+  source.connect(processor);
+  processor.connect(ctx.destination); // required to drive onaudioprocess
+  return { ctx, source, processor, stream };
+}
+
+function teardownPipe(pipe: PcmPipe | null): void {
+  if (!pipe) return;
+  try {
+    pipe.processor.disconnect();
+    pipe.source.disconnect();
+    pipe.ctx.close();
+    pipe.stream.getTracks().forEach(t => t.stop());
+  } catch {
+    // ignore teardown errors
   }
 }
 
-const TARGET_SAMPLE_RATE = 24000;
-const CHUNK_MS = 20;
-
 export function useMacAudioCapture(): void {
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micPipeRef = useRef<PcmPipe | null>(null);
+  const loopbackPipeRef = useRef<PcmPipe | null>(null);
 
   useEffect(() => {
     if (!window.electronAPI?.onMacAudioStart) return;
 
-    const start = async () => {
-      if (streamRef.current) return; // already running
+    const startMic = async () => {
+      if (micPipeRef.current) return;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -39,60 +75,71 @@ export function useMacAudioCapture(): void {
           },
           video: false
         });
-        streamRef.current = stream;
-
-        // ScriptProcessorNode is deprecated but universally supported and
-        // doesn't need a separate worklet file (easier to bundle).
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioCtxRef.current = ctx;
-
-        const source = ctx.createMediaStreamSource(stream);
-        sourceRef.current = source;
-
-        const bufferSize = 2048; // ~43 ms at 48 kHz
-        const processor = ctx.createScriptProcessor(bufferSize, 1, 1);
-        processorRef.current = processor;
-
-        const srcRate = ctx.sampleRate;
-        const ratio = TARGET_SAMPLE_RATE / srcRate;
-
-        processor.onaudioprocess = (ev) => {
-          const input = ev.inputBuffer.getChannelData(0);
-          const outLen = Math.floor(input.length * ratio);
-          const out = new Int16Array(outLen);
-          for (let i = 0; i < outLen; i++) {
-            const srcIdx = Math.floor(i / ratio);
-            let s = input[srcIdx];
-            if (s > 1) s = 1;
-            else if (s < -1) s = -1;
-            out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          }
-          // Transfer the buffer to the main process without copying.
-          window.electronAPI.sendMacAudioChunk(out.buffer);
-        };
-
-        source.connect(processor);
-        processor.connect(ctx.destination); // required to drive onaudioprocess
-        console.log('[mac-audio] renderer mic capture started, ctx rate=', srcRate);
+        micPipeRef.current = makePcmPipe(stream, (buf) =>
+          window.electronAPI.sendMacAudioChunk(buf)
+        );
+        console.log('[mac-audio] mic capture started');
       } catch (err) {
-        console.error('[mac-audio] getUserMedia failed:', err);
+        console.error('[mac-audio] mic getUserMedia failed:', err);
       }
     };
 
-    const stop = () => {
+    // Best-effort system-audio (loopback) via desktop capture. macOS 13+ only;
+    // silently no-ops if the platform/permissions don't allow it.
+    const startLoopback = async () => {
+      if (loopbackPipeRef.current) return;
       try {
-        processorRef.current?.disconnect();
-        sourceRef.current?.disconnect();
-        audioCtxRef.current?.close();
-        streamRef.current?.getTracks().forEach(t => t.stop());
-      } catch {
-        // ignore teardown errors
+        const sourceId = await window.electronAPI.getScreenSourceId();
+        if (!sourceId) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            // Electron desktop-capture loopback constraints.
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: sourceId
+            }
+          },
+          video: {
+            mandatory: {
+              chromeMediaSource: 'desktop',
+              chromeMediaSourceId: sourceId,
+              maxWidth: 1,
+              maxHeight: 1,
+              maxFrameRate: 1
+            }
+          }
+        } as any);
+
+        // Drop the video track immediately — we only want the audio.
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        if (stream.getAudioTracks().length === 0) {
+          stream.getTracks().forEach(t => t.stop());
+          console.log('[mac-audio] no system-audio track available (expected on some macOS versions)');
+          return;
+        }
+
+        loopbackPipeRef.current = makePcmPipe(stream, (buf) =>
+          window.electronAPI.sendMacAudioLoopbackChunk(buf)
+        );
+        console.log('[mac-audio] system-audio (loopback) capture started');
+      } catch (err) {
+        // Non-fatal — mic capture continues.
+        console.log('[mac-audio] system-audio capture unavailable:', (err as Error)?.message);
       }
-      processorRef.current = null;
-      sourceRef.current = null;
-      audioCtxRef.current = null;
-      streamRef.current = null;
-      console.log('[mac-audio] renderer mic capture stopped');
+    };
+
+    const start = () => {
+      startMic();
+      startLoopback();
+    };
+
+    const stop = () => {
+      teardownPipe(micPipeRef.current);
+      teardownPipe(loopbackPipeRef.current);
+      micPipeRef.current = null;
+      loopbackPipeRef.current = null;
+      console.log('[mac-audio] capture stopped');
     };
 
     const offStart = window.electronAPI.onMacAudioStart(start);

@@ -1,5 +1,5 @@
-import { Tray, Menu, nativeImage, app } from 'electron';
-import path from 'path';
+import { Tray, Menu, app } from 'electron';
+import { createTrayIcon } from './tray-icon';
 
 export class TrayManager {
   private tray: Tray | null = null;
@@ -10,16 +10,7 @@ export class TrayManager {
     onSettings: () => void;
     onQuit: () => void;
   }): Tray {
-    // Try to load custom icon, fallback to a simple one
-    let icon: Electron.NativeImage;
-    try {
-      icon = nativeImage.createFromPath(
-        path.join(__dirname, '../../assets/icons/tray-icon.ico')
-      );
-    } catch {
-      // Create a minimal 16x16 icon
-      icon = nativeImage.createEmpty();
-    }
+    const icon = createTrayIcon();
 
     this.tray = new Tray(icon);
     this.tray.setToolTip('Thoughtful');

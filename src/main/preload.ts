@@ -107,7 +107,12 @@ const electronAPI = {
   },
   sendMacAudioChunk: (samples: ArrayBuffer) => {
     ipcRenderer.send('mac-audio:chunk', { samples });
-  }
+  },
+  sendMacAudioLoopbackChunk: (samples: ArrayBuffer) => {
+    ipcRenderer.send('mac-audio:loopback-chunk', { samples });
+  },
+  getScreenSourceId: (): Promise<string | null> =>
+    ipcRenderer.invoke('mac-audio:getScreenSourceId')
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

@@ -47,7 +47,7 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: assets/icons/app-icon.ico
+  icon: assets/icon.ico
   extraResources:
     - from: build/Release/
       to: native/
@@ -61,7 +61,7 @@ nsis:
 
 mac:
   category: public.app-category.productivity
-  icon: assets/icons/app-icon.icns
+  icon: assets/icon.png
   target:
     - target: dmg
       arch:

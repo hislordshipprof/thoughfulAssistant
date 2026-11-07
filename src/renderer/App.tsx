@@ -23,6 +23,15 @@ const App: React.FC = () => {
   // macOS mic capture via Web Audio (no-op on Windows — main never fires the start event)
   useMacAudioCapture();
 
+  // When typing mode turns on, focus the overlay textarea so keystrokes land
+  // there (used by the macOS focusable-window typing path; harmless on Win).
+  useEffect(() => {
+    if (isTypingMode) {
+      const ta = document.querySelector('.extra-context-input') as HTMLTextAreaElement | null;
+      ta?.focus();
+    }
+  }, [isTypingMode]);
+
   // Listen for transcript updates
   useIpcEvent('onTranscriptUpdate', useCallback((entries: any[]) => {
     setTranscriptEntries(entries);
