@@ -1,5 +1,8 @@
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen, app } from 'electron';
 import path from 'path';
+
+const IS_MAC = process.platform === 'darwin';
+const IS_WIN = process.platform === 'win32';
 
 let nativeAddon: any;
 try {
@@ -42,6 +45,9 @@ export class WindowManager {
       hasShadow: false,
       opacity: config.opacity,
       focusable: false,
+      // macOS panel-like treatment: don't take focus, don't activate on click,
+      // fully transparent vibrancy-free surface.
+      ...(IS_MAC ? { type: 'panel', titleBarStyle: 'hidden', vibrancy: undefined } : {}),
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
         contextIsolation: true,
@@ -50,11 +56,25 @@ export class WindowManager {
       }
     });
 
+    // Cross-platform screen-capture hiding — Windows uses WDA_EXCLUDEFROMCAPTURE,
+    // macOS uses NSWindowSharingNone. Electron maps setContentProtection to both.
+    // This alone is enough to hide the window from every screen-capture API,
+    // so flip the stealth flag now (the native addon call below only *adds*
+    // niceties like no-activate / all-Spaces behavior).
+    this.mainWindow.setContentProtection(true);
+    this.isStealthActive = true;
+
     // Set always on top with highest level
     this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    this.mainWindow.setVisibleOnAllWorkspaces(true);
+    this.mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-    // Apply stealth mode via native addon
+    if (IS_MAC) {
+      // Keep the app out of the Dock and Cmd+Tab list, like a background agent.
+      app.dock?.hide?.();
+    }
+
+    // Apply stealth mode via native addon (adds platform-specific extras —
+    // tool-window / no-activate on Win, panel style & collection behavior on Mac)
     this.applyStealthMode();
 
     // Subclass window so clicks on overlay never steal focus from other apps
@@ -163,8 +183,15 @@ export class WindowManager {
 
     const savedOpacity = this.mainWindow.getOpacity();
     this.mainWindow.setOpacity(0);
-    this.mainWindow.show();
+    if (IS_MAC) {
+      // showInactive keeps the current app frontmost — matches our no-activate intent.
+      this.mainWindow.showInactive();
+    } else {
+      this.mainWindow.show();
+    }
     this.reapplyDisplayAffinity();
+    // Re-assert content protection: some macOS space switches drop it silently.
+    this.mainWindow.setContentProtection(true);
     this.mainWindow.setOpacity(savedOpacity);
   }
 

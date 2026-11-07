@@ -83,18 +83,27 @@ export class AudioManager extends EventEmitter {
       this.emit('transcription-connected');
     });
 
-    // Start native audio capture
-    console.log('[audio] Starting native WASAPI capture...');
+    // Start native audio capture (Windows WASAPI). On macOS the addon stub
+    // returns false — surface a platform-specific message rather than the
+    // generic failure one.
+    console.log('[audio] Starting native audio capture...');
     const started = this.native.startCapture(
       (chunk) => this.handleLoopbackChunk(chunk),
       (chunk) => this.handleMicChunk(chunk)
     );
 
     if (!started) {
+      if (process.platform === 'darwin') {
+        throw new Error(
+          'System audio capture is not yet implemented on macOS. ' +
+          'Install a loopback audio device (e.g. BlackHole) and route it as ' +
+          'the system input, or use the Mac build without the recording feature.'
+        );
+      }
       console.error('[audio] Native capture failed to start');
       throw new Error('Failed to start audio capture');
     }
-    console.log('[audio] Native WASAPI capture started');
+    console.log('[audio] Native audio capture started');
 
     await this.sttProvider.start();
     this.isRunning = true;

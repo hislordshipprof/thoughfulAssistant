@@ -1,3 +1,7 @@
+import { SYSTEM_DESIGN_SYSTEM_PROMPT } from './prompts/system-design';
+import { BEHAVIOURAL_SYSTEM_PROMPT } from './prompts/behavioural';
+import { CODE_MOD_SYSTEM_PROMPT } from './prompts/code-modification';
+
 export const SYSTEM_PROMPT = `You are an expert software engineer providing real-time assistance during a technical interview. Your responses must be:
 
 1. **Concise**: Keep answers short and directly relevant. No filler text.
@@ -171,6 +175,9 @@ export function getSystemPrompt(mode: string, resume?: string, jobDescription?: 
 
   switch (mode) {
     case 'leetcode': return preamble + LEETCODE_SYSTEM_PROMPT;
+    case 'system_design': return preamble + SYSTEM_DESIGN_SYSTEM_PROMPT;
+    case 'behavioural': return preamble + BEHAVIOURAL_SYSTEM_PROMPT;
+    case 'code_modification': return preamble + CODE_MOD_SYSTEM_PROMPT;
     default: return preamble + SYSTEM_PROMPT;
   }
 }
@@ -195,10 +202,21 @@ export function buildContextMessage(
     context += `## Your Question\n${userQuery}\n\n`;
   }
 
-  if (interviewMode === 'leetcode') {
-    context += `Analyze your previous responses in this conversation to determine which phase to give next. Follow phase detection rules strictly — one phase per response, never skip or combine.`;
-  } else {
-    context += `Based on the above context, provide the most helpful response for the interview. If there's a coding question visible, solve it. If there's a discussion happening, provide relevant talking points.`;
+  switch (interviewMode) {
+    case 'leetcode':
+      context += `Analyze your previous responses in this conversation to determine which phase to give next. Follow phase detection rules strictly — one phase per response, never skip or combine.`;
+      break;
+    case 'system_design':
+      context += `Determine the right system-design phase from your conversation history (clarify → requirements+estimation → architecture+diagram → adaptive deep-dive). One phase per response. When you reach the architecture phase, actually produce the mermaid diagram — do not just say you will.`;
+      break;
+    case 'code_modification':
+      context += `Determine the right phase from your conversation history (review+number issues → address each numbered issue with code → follow-up). One phase per response. Only critique code that is actually visible.`;
+      break;
+    case 'behavioural':
+      context += `Answer as ME in a behavioural interview. 5-8 sentences, open with substance, STAR invisibly, pull a concrete number from my resume where relevant, mirror the job description's keywords, and talk-test every sentence for spoken delivery.`;
+      break;
+    default:
+      context += `Based on the above context, provide the most helpful response for the interview. If there's a coding question visible, solve it. If there's a discussion happening, provide relevant talking points.`;
   }
 
   return context;

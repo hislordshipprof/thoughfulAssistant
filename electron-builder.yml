@@ -1,27 +1,94 @@
-appId: com.interview-overlay.app
-productName: InterviewOverlay
+appId: com.thoughtful.app
+productName: Thoughtful
 copyright: Copyright © 2024
 directories:
   output: release
   buildResources: assets
+# Don't invoke @electron/rebuild from the packager — the explicit
+# `npm run rebuild` step handles the Windows native addon, and on macOS
+# the addon is intentionally skipped (stealth is delivered through
+# Electron APIs). Letting electron-builder also rebuild runs node-gyp
+# again and fails on toolchains without distutils / with new SDKs.
+npmRebuild: false
+buildDependenciesFromSource: false
 files:
   - out/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-store/**/*
-  - node_modules/node-addon-api/**/*
-extraResources:
-  - from: src/native/build/Release/
-    to: native/
-    filter:
-      - "*.node"
+  # Pack every production dependency — the main process requires `openai`,
+  # `@anthropic-ai/sdk`, `ws`, `tesseract.js`, `zod`, `electron-store`, etc.
+  # at runtime (electron-vite marks them external). The previous
+  # exclude-everything-then-whitelist-two config broke whenever the main
+  # process reached for any other dep. electron-builder's default already
+  # drops devDependencies and dev-only tree parts.
+  - "**/*"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples,*.d.ts}"
+  - "!**/node_modules/.bin"
+  - "!**/*.{o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!src/**/*"
+  - "!scripts/**/*"
+  - "!assets/icons/**/*"
+  - "!build/**/*"
+  - "!release/**/*"
+  - "!binding.gyp"
+  - "!tsconfig*.json"
+  - "!electron.vite.config.ts"
+  - "!*.md"
+  - "!.env*"
+  - "!.github/**/*"
+
 win:
   target:
     - target: nsis
       arch:
         - x64
-  icon: assets/icons/app-icon.ico
+  icon: assets/icon.ico
+  extraResources:
+    - from: build/Release/
+      to: native/
+      filter:
+        - "*.node"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+
+mac:
+  category: public.app-category.productivity
+  icon: assets/icon.png
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: "Thoughtful uses the microphone to transcribe your speech during interviews."
+    NSScreenCaptureUsageDescription: "Thoughtful captures the screen to read interview questions with OCR."
+    NSAppleEventsUsageDescription: "Thoughtful needs to interact with other apps to position its overlay window."
+    NSInputMonitoringUsageDescription: "Thoughtful monitors keyboard input for global hotkeys."
+  notarize: false
+
+dmg:
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

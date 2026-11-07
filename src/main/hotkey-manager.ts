@@ -1,6 +1,9 @@
 import { EventEmitter } from 'events';
 import path from 'path';
+import { globalShortcut } from 'electron';
 import { HotkeyConfig } from '../services/config/config-schema';
+
+const IS_WIN = process.platform === 'win32';
 
 let nativeAddon: any;
 try {
@@ -36,6 +39,20 @@ const MODIFIER_VKS = new Set([
   VK_LMENU, VK_RMENU,
 ]);
 
+// Bare single-modifier Command combos that macOS reserves system-wide.
+// Registering these globally would steal them from every other app, so we
+// remap them to a free combo that preserves our action. Keys match what
+// labelToAccelerator emits ("Ctrl" → "CommandOrControl", resolved to
+// Command on macOS).
+const RESERVED_MAC_ACCELERATORS: Record<string, string> = {
+  'CommandOrControl+H': 'CommandOrControl+Alt+H',   // macOS: Hide app
+  'CommandOrControl+M': 'CommandOrControl+Alt+M',   // macOS: Minimize
+  'CommandOrControl+W': 'CommandOrControl+Alt+W',   // macOS: Close window
+  'Command+H': 'Command+Alt+H',
+  'Command+M': 'Command+Alt+M',
+  'Command+W': 'Command+Alt+W'
+};
+
 interface KeyState {
   [vkCode: number]: boolean;
 }
@@ -52,6 +69,7 @@ interface ParsedHotkey {
 
 export class HotkeyManager extends EventEmitter {
   private bindings: HotkeyBinding[] = [];
+  private bindingLabels: Map<string, string> = new Map();
   private rawOnlyBindings: HotkeyBinding[] = [];  // Standalone keys (no modifiers) — Raw Input
   private keyState: KeyState = {};
   private isRunning = false;
@@ -66,17 +84,34 @@ export class HotkeyManager extends EventEmitter {
       name,
       vkCodes: config.vkCodes
     }));
+    this.bindingLabels = new Map(Object.entries(hotkeys).map(([name, cfg]) => [name, cfg.label]));
     console.log('[hotkey] Registered bindings:', this.bindings.map(b => `${b.name}=[${b.vkCodes.map(v => '0x'+v.toString(16)).join(',')}]`).join(', '));
 
-    // If already running, re-register global hotkeys
+    // If already running, re-register
     if (this.isRunning) {
-      this.setupGlobalHotkeys();
+      if (IS_WIN) {
+        this.setupGlobalHotkeys();
+      } else {
+        this.setupElectronGlobalShortcuts();
+      }
     }
   }
 
   start(): boolean {
-    if (this.isRunning || !nativeAddon) {
-      if (!nativeAddon) console.warn('Native addon unavailable — hotkeys disabled');
+    if (this.isRunning) return true;
+
+    // macOS / Linux: skip the Win32 raw-input path and use Electron's
+    // globalShortcut (native Cocoa event tap, no accessibility permission
+    // required for registering — only for standalone keys like Escape,
+    // which we fall back to a BrowserWindow 'before-input-event' for).
+    if (!IS_WIN) {
+      this.isRunning = true;
+      this.setupElectronGlobalShortcuts();
+      return true;
+    }
+
+    if (!nativeAddon) {
+      console.warn('Native addon unavailable — hotkeys disabled');
       return false;
     }
 
@@ -100,7 +135,15 @@ export class HotkeyManager extends EventEmitter {
   }
 
   stop(): void {
-    if (!this.isRunning || !nativeAddon) return;
+    if (!this.isRunning) return;
+
+    if (!IS_WIN) {
+      globalShortcut.unregisterAll();
+      this.isRunning = false;
+      return;
+    }
+
+    if (!nativeAddon) return;
 
     // Unregister global hotkeys first
     if (this.globalHotkeysRegistered) {
@@ -115,6 +158,44 @@ export class HotkeyManager extends EventEmitter {
     nativeAddon.stopRawInputListener();
     this.isRunning = false;
     this.keyState = {};
+  }
+
+  /**
+   * macOS/Linux path: register each binding through Electron's globalShortcut.
+   * Accelerator string is derived from the config label (Ctrl+Shift+H → CommandOrControl+Shift+H).
+   */
+  private setupElectronGlobalShortcuts(): void {
+    globalShortcut.unregisterAll();
+
+    for (const binding of this.bindings) {
+      const label = this.bindingLabels.get(binding.name) || '';
+      let accelerator = labelToAccelerator(label);
+      if (!accelerator) {
+        console.warn(`[hotkey] Skipping ${binding.name} — no translatable label (${label})`);
+        continue;
+      }
+
+      // Avoid hijacking reserved macOS system shortcuts globally. A bare
+      // Command+<key> for Hide/Minimize/etc. would be consumed for every
+      // app, not just ours. Remap to a free combo so the action still works.
+      const remapped = RESERVED_MAC_ACCELERATORS[accelerator];
+      if (remapped) {
+        console.log(`[hotkey] Remapping reserved macOS accelerator ${accelerator} → ${remapped} for ${binding.name}`);
+        accelerator = remapped;
+      }
+
+      try {
+        const ok = globalShortcut.register(accelerator, () => {
+          console.log(`[hotkey] Electron globalShortcut fired: ${binding.name} (${accelerator})`);
+          this.emit('hotkey', binding.name);
+        });
+        if (!ok) {
+          console.warn(`[hotkey] Failed to register ${accelerator} for ${binding.name} (already in use?)`);
+        }
+      } catch (e: any) {
+        console.warn(`[hotkey] Error registering ${accelerator} for ${binding.name}:`, e.message);
+      }
+    }
   }
 
   private setupGlobalHotkeys(): void {
@@ -219,3 +300,64 @@ export class HotkeyManager extends EventEmitter {
     return this.isRunning;
   }
 }
+
+/**
+ * Translate a human-readable hotkey label ("Ctrl+Shift+H", "Ctrl+Alt+Up",
+ * "Escape") into an Electron accelerator. On macOS, Ctrl → Command so the
+ * stored Windows-oriented defaults feel native (Cmd+Shift+H, etc.).
+ */
+function labelToAccelerator(label: string): string | null {
+  if (!label) return null;
+  const parts = label.split('+').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const out: string[] = [];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    switch (lower) {
+      case 'ctrl':
+      case 'control':
+        out.push('CommandOrControl');
+        break;
+      case 'cmd':
+      case 'command':
+      case 'meta':
+      case 'super':
+      case 'win':
+        out.push('Command');
+        break;
+      case 'shift':
+        out.push('Shift');
+        break;
+      case 'alt':
+      case 'option':
+        out.push('Alt');
+        break;
+      case 'up':   out.push('Up'); break;
+      case 'down': out.push('Down'); break;
+      case 'left': out.push('Left'); break;
+      case 'right': out.push('Right'); break;
+      case 'esc':
+      case 'escape':
+        out.push('Escape');
+        break;
+      case 'space': out.push('Space'); break;
+      case 'tab':   out.push('Tab'); break;
+      case 'enter':
+      case 'return':
+        out.push('Return');
+        break;
+      case 'backspace': out.push('Backspace'); break;
+      case 'delete':    out.push('Delete'); break;
+      case 'home':      out.push('Home'); break;
+      case 'end':       out.push('End'); break;
+      case 'pageup':    out.push('PageUp'); break;
+      case 'pagedown':  out.push('PageDown'); break;
+      default:
+        // Letters, digits, F-keys, punctuation — pass through as-is uppercased.
+        out.push(part.length === 1 ? part.toUpperCase() : part);
+    }
+  }
+  return out.join('+');
+}
+

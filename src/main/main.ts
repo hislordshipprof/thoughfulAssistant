@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, desktopCapturer } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { WindowManager } from './window-manager';
@@ -99,12 +99,6 @@ async function createApp(): Promise<void> {
   trayManager = new TrayManager();
   aiManager = new AiManager();
 
-  const nativeAddon = windowManager.getNativeAddon();
-  audioManager = new AudioManager(nativeAddon || {
-    startCapture: () => false,
-    stopCapture: () => false,
-    isCapturing: () => false
-  });
   ocrManager = new OcrManager(config.ocr.intervalSeconds);
   ocrManager.setStealthToggle(windowManager);
 
@@ -114,7 +108,7 @@ async function createApp(): Promise<void> {
     aiManager.setActiveProvider(config.ai.provider);
   }
 
-  // Create overlay window
+  // Create overlay window (must exist before the Mac audio bridge needs it)
   const mainWindow = windowManager.createOverlayWindow({
     width: config.overlay.width,
     height: config.overlay.height,
@@ -123,8 +117,59 @@ async function createApp(): Promise<void> {
     opacity: config.overlay.opacity
   });
 
+  // Audio capture source — Windows uses the native WASAPI addon, macOS uses
+  // a renderer-side getUserMedia bridge over IPC.
+  const nativeAddon = windowManager.getNativeAddon();
+  let audioSource: any;
+  if (process.platform === 'darwin') {
+    const { MacAudioBridge } = await import('./mac-audio-bridge');
+    audioSource = new MacAudioBridge(mainWindow);
+    console.log('[main] Using MacAudioBridge for microphone capture');
+  } else if (nativeAddon) {
+    audioSource = nativeAddon;
+  } else {
+    audioSource = {
+      startCapture: () => false,
+      stopCapture: () => false,
+      isCapturing: () => false
+    };
+  }
+  audioManager = new AudioManager(audioSource);
+
   // Smart hit-test is the default — overlay UI elements are clickable,
   // transparent areas pass through. No binary click-through toggle needed.
+
+  // Grant microphone / media permissions requested by the renderer
+  // (macOS still shows the native OS prompt the first time).
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    // 'media' covers microphone + camera getUserMedia; 'display-capture'
+    // covers desktop/system-audio capture used by the Mac loopback path.
+    if (permission === 'media' || permission === 'display-capture') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+
+  // macOS system-audio capture. When the renderer calls getDisplayMedia,
+  // hand it the primary screen plus 'loopback' audio — Electron captures
+  // system audio through ScreenCaptureKit on macOS 13+ with no on-screen
+  // picker. We only want the audio; the renderer drops the video track.
+  if (process.platform === 'darwin') {
+    try {
+      mainWindow.webContents.session.setDisplayMediaRequestHandler((_request, callback) => {
+        desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+          .then((sources) => {
+            if (!sources.length) { callback({}); return; }
+            // 'loopback' = system audio via ScreenCaptureKit (Electron ≥30, macOS 13+)
+            callback({ video: sources[0], audio: 'loopback' } as any);
+          })
+          .catch(() => callback({}));
+      }, { useSystemPicker: false });
+    } catch (e: any) {
+      console.warn('[main] setDisplayMediaRequestHandler unavailable:', e?.message);
+    }
+  }
 
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -132,6 +177,16 @@ async function createApp(): Promise<void> {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  // Push initial status once the renderer is ready, so the StatusBar
+  // reflects true state (STEALTH, provider, etc.) instead of its defaults.
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow.webContents.send('status:update', {
+      isRecording: audioManager.isActive(),
+      aiProvider: aiManager.getActiveProviderName(),
+      isStealthActive: windowManager.isStealthEnabled()
+    });
+  });
 
   // Register IPC handlers
   registerIpcHandlers(mainWindow, aiManager, audioManager, ocrManager, configStore, windowManager);
@@ -307,6 +362,13 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
 
     case 'cancelStream':
       aiManager.cancelStream();
+      // Escape also exits typing mode (Windows does this inside the native
+      // hook; replicate for the focusable-window path on macOS/other).
+      if (typingModeActive && !windowManager.getNativeAddon()?.setTypingMode) {
+        typingModeActive = false;
+        windowManager.setFocusableForInput(false);
+        mainWindow.webContents.send('typing:mode', false);
+      }
       mainWindow.webContents.send('hotkey:action', 'cancelStream');
       break;
 
@@ -319,7 +381,11 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       if (typingModeActive) {
         typingModeActive = false;
         const addon = windowManager.getNativeAddon();
-        addon?.setTypingMode?.(false);
+        if (addon?.setTypingMode) {
+          addon.setTypingMode(false);
+        } else {
+          windowManager.setFocusableForInput(false);
+        }
         mainWindow.webContents.send('typing:mode', false);
       }
       mainWindow.webContents.send('ocr:screenshots', []);
@@ -363,18 +429,21 @@ async function handleHotkeyAction(action: string, mainWindow: BrowserWindow): Pr
       break;
 
     case 'toggleTypingMode': {
-      console.log('[main] toggleTypingMode action received!');
       const addon = windowManager.getNativeAddon();
-      console.log('[main] addon:', !!addon, 'setTypingMode:', !!addon?.setTypingMode);
+      typingModeActive = !typingModeActive;
       if (addon?.setTypingMode) {
-        typingModeActive = !typingModeActive;
-        console.log('[main] Setting typing mode to:', typingModeActive);
+        // Windows: native LL hook swallows keystrokes globally and relays
+        // them as typing events.
         addon.setTypingMode(typingModeActive);
-        mainWindow.webContents.send('typing:mode', typingModeActive);
-        console.log('[main] Typing mode set and sent to renderer:', typingModeActive);
       } else {
-        console.warn('[main] WARNING: setTypingMode not available on addon');
+        // macOS/other: make the overlay focusable so keystrokes land in the
+        // overlay textarea (the renderer focuses it) instead of the app
+        // underneath. Keys never reach the app behind the overlay while it
+        // holds focus.
+        windowManager.setFocusableForInput(typingModeActive);
       }
+      mainWindow.webContents.send('typing:mode', typingModeActive);
+      console.log('[main] Typing mode:', typingModeActive, addon?.setTypingMode ? '(native)' : '(focusable)');
       break;
     }
   }

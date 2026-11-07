@@ -69,6 +69,11 @@ const electronAPI = {
   // Clipboard — write without stealing focus
   copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
 
+  // Resume / job-description file upload — native picker + text extraction
+  pickAndExtractFile: (purpose: 'resume' | 'jobDescription'): Promise<
+    { success: boolean; text: string; fileName: string; error?: string } | null
+  > => ipcRenderer.invoke('file:pick-and-extract', purpose),
+
   // Status
   onStatusUpdate: (callback: (status: any) => void) => {
     const handler = (_event: any, status: any) => callback(status);
@@ -91,6 +96,25 @@ const electronAPI = {
     const handler = () => callback();
     ipcRenderer.on('extra-context:clear', handler);
     return () => ipcRenderer.removeListener('extra-context:clear', handler);
+  },
+
+  // macOS audio bridge — main asks renderer to capture mic via getUserMedia
+  // and ship Int16 24 kHz mono PCM back through IPC.
+  onMacAudioStart: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('mac-audio:start', handler);
+    return () => ipcRenderer.removeListener('mac-audio:start', handler);
+  },
+  onMacAudioStop: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('mac-audio:stop', handler);
+    return () => ipcRenderer.removeListener('mac-audio:stop', handler);
+  },
+  sendMacAudioChunk: (samples: ArrayBuffer) => {
+    ipcRenderer.send('mac-audio:chunk', { samples });
+  },
+  sendMacAudioLoopbackChunk: (samples: ArrayBuffer) => {
+    ipcRenderer.send('mac-audio:loopback-chunk', { samples });
   }
 };
 

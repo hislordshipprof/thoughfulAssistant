@@ -10,9 +10,9 @@ export const ConfigSchema = z.object({
     provider: z.enum(['openai', 'anthropic']).default('openai'),
     openaiKey: z.string().default(''),
     anthropicKey: z.string().default(''),
-    openaiModel: z.string().default('gpt-4o'),
-    anthropicModel: z.string().default('claude-sonnet-4-5-20250929'),
-    interviewMode: z.enum(['leetcode', 'general']).default('general')
+    openaiModel: z.string().default('gpt-6.1-sol'),
+    anthropicModel: z.string().default('claude-sonnet-5-5'),
+    interviewMode: z.enum(['general', 'behavioural', 'leetcode', 'system_design', 'code_modification']).default('general')
   }),
   audio: z.object({
     transcriptionMode: z.enum(['deepgram', 'realtime', 'groq-whisper', 'whisper', 'google-stt']).default('deepgram'),

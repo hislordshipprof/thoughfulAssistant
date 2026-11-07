@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import MermaidDiagram from './MermaidDiagram';
 
 interface AiResponseViewProps {
   response: string;
@@ -68,6 +69,10 @@ const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, 
             const match = /language-(\w+)/.exec(className || '');
             const inline = !match;
             const codeText = String(children).replace(/\n$/, '');
+            // Render mermaid code blocks as diagrams (e.g. System Design mode).
+            if (match && match[1] === 'mermaid') {
+              return <MermaidDiagram code={codeText} streaming={isStreaming} />;
+            }
             return !inline ? (
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '4px', right: '4px', zIndex: 1 }}>
