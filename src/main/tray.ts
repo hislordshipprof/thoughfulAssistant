@@ -22,7 +22,7 @@ export class TrayManager {
     }
 
     this.tray = new Tray(icon);
-    this.tray.setToolTip('Interview Overlay');
+    this.tray.setToolTip('Thoughtful');
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -66,7 +66,7 @@ export class TrayManager {
 
   setRecordingState(isRecording: boolean): void {
     this.tray?.setToolTip(
-      isRecording ? 'Interview Overlay (Recording)' : 'Interview Overlay'
+      isRecording ? 'Thoughtful (Recording)' : 'Thoughtful'
     );
   }
 }

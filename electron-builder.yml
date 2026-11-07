@@ -1,5 +1,5 @@
-appId: com.interview-overlay.app
-productName: InterviewOverlay
+appId: com.thoughtful.app
+productName: Thoughtful
 copyright: Copyright © 2024
 directories:
   output: release
@@ -52,10 +52,10 @@ mac:
   entitlementsInherit: assets/entitlements.mac.plist
   extendInfo:
     LSUIElement: true
-    NSMicrophoneUsageDescription: "Interview Overlay uses the microphone to transcribe your speech during interviews."
-    NSScreenCaptureUsageDescription: "Interview Overlay captures the screen to read interview questions with OCR."
-    NSAppleEventsUsageDescription: "Interview Overlay needs to interact with other apps to position its overlay window."
-    NSInputMonitoringUsageDescription: "Interview Overlay monitors keyboard input for global hotkeys."
+    NSMicrophoneUsageDescription: "Thoughtful uses the microphone to transcribe your speech during interviews."
+    NSScreenCaptureUsageDescription: "Thoughtful captures the screen to read interview questions with OCR."
+    NSAppleEventsUsageDescription: "Thoughtful needs to interact with other apps to position its overlay window."
+    NSInputMonitoringUsageDescription: "Thoughtful monitors keyboard input for global hotkeys."
   notarize: false
 
 dmg:

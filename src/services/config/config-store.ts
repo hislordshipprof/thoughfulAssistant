@@ -19,7 +19,7 @@ export class ConfigStore {
 
   constructor() {
     this.store = new Store<AppConfig>({
-      name: 'interview-overlay-config',
+      name: 'thoughtful-config',
       defaults: defaultConfig
     });
     this.migrateHotkeys();

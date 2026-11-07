@@ -1,7 +1,7 @@
 {
-  "name": "interview-overlay",
+  "name": "thoughtful",
   "version": "1.0.0",
-  "description": "Invisible AI-powered interview assistant overlay",
+  "description": "Thoughtful — invisible AI-powered interview overlay",
   "main": "out/main/main.js",
   "private": true,
   "scripts": {
