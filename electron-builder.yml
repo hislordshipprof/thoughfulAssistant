@@ -13,9 +13,34 @@ npmRebuild: false
 buildDependenciesFromSource: false
 files:
   - out/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-store/**/*
-  - node_modules/node-addon-api/**/*
+  # Pack every production dependency — the main process requires `openai`,
+  # `@anthropic-ai/sdk`, `ws`, `tesseract.js`, `zod`, `electron-store`, etc.
+  # at runtime (electron-vite marks them external). The previous
+  # exclude-everything-then-whitelist-two config broke whenever the main
+  # process reached for any other dep. electron-builder's default already
+  # drops devDependencies and dev-only tree parts.
+  - "**/*"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples,*.d.ts}"
+  - "!**/node_modules/.bin"
+  - "!**/*.{o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!src/**/*"
+  - "!scripts/**/*"
+  - "!assets/icons/**/*"
+  - "!build/**/*"
+  - "!release/**/*"
+  - "!binding.gyp"
+  - "!tsconfig*.json"
+  - "!electron.vite.config.ts"
+  - "!*.md"
+  - "!.env*"
+  - "!.github/**/*"
 
 win:
   target:
