@@ -359,7 +359,9 @@ export class TranscriptionService extends EventEmitter {
 
     try {
       const wavBuffer = AudioRingBuffer.toWavBlob(samples, 24000);
-      const file = new File([wavBuffer], 'audio.wav', { type: 'audio/wav' });
+      const wavBytes = new Uint8Array(wavBuffer.byteLength);
+      wavBytes.set(wavBuffer);
+      const file = new File([wavBytes], 'audio.wav', { type: 'audio/wav' });
 
       const response = await this.openai.audio.transcriptions.create({
         model: 'whisper-1',

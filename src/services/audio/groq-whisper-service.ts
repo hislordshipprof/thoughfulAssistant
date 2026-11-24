@@ -133,7 +133,9 @@ export class GroqWhisperService extends EventEmitter {
 
       // Use FormData via fetch — Groq API is OpenAI-compatible
       const formData = new FormData();
-      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+      const wavBytes = new Uint8Array(wavBuffer.byteLength);
+      wavBytes.set(wavBuffer);
+      const blob = new Blob([wavBytes], { type: 'audio/wav' });
       formData.append('file', blob, 'audio.wav');
       formData.append('model', 'whisper-large-v3-turbo');
       formData.append('response_format', 'verbose_json');

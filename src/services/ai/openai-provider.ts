@@ -28,7 +28,10 @@ export class OpenAiProvider implements AiProvider {
       const stream = await this.client.chat.completions.create(
         {
           model: this.model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: messages.map(m => m.role === 'user' && m.images?.length
+            ? { role: 'user' as const, content: [{ type: 'text' as const, text: m.content },
+              ...m.images.map(url => ({ type: 'image_url' as const, image_url: { url, detail: 'auto' as const } }))] }
+            : { role: m.role, content: m.content }),
           stream: true,
           temperature: 0.7,
           max_tokens: 2048
@@ -59,6 +62,8 @@ export class OpenAiProvider implements AiProvider {
   isConfigured(): boolean {
     return !!this.apiKey;
   }
+
+  async supportsImages(): Promise<boolean> { return true; }
 
   setApiKey(key: string): void {
     this.apiKey = key;

@@ -1,6 +1,7 @@
 export interface AiMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  images?: string[]; // Data URLs, sent only for the current user turn.
 }
 
 export interface AiStreamEvent {
@@ -16,4 +17,5 @@ export interface AiProvider {
   ): Promise<void>;
   cancelStream(): void;
   isConfigured(): boolean;
+  supportsImages?(): Promise<boolean>;
 }

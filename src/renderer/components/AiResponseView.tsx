@@ -7,6 +7,7 @@ interface AiResponseViewProps {
   response: string;
   isStreaming: boolean;
   error: string | null;
+  askShortcut: string;
 }
 
 const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label }) => {
@@ -30,7 +31,7 @@ const CopyButton: React.FC<{ text: string; label?: string }> = ({ text, label })
   );
 };
 
-const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, error }) => {
+const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, error, askShortcut }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,16 +42,18 @@ const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, 
 
   if (error) {
     return (
-      <div className="ai-response" style={{ color: '#ef4444', padding: '12px' }}>
-        Error: {error}
+      <div className="ai-response ai-response-error" role="alert">
+        <span className="ai-error-label">Couldn’t answer</span>
+        {error}
       </div>
     );
   }
 
   if (!response && !isStreaming) {
     return (
-      <div className="ai-response" style={{ color: 'rgba(255,255,255,0.3)', padding: '12px', textAlign: 'center' }}>
-        Press Ctrl+Shift+A to ask AI, or wait for auto-analysis.
+      <div className="ai-response ai-response-empty">
+        <span className="ai-empty-orb" aria-hidden="true">✦</span>
+        <span>Ask anything below, or press {askShortcut} to answer from your screen.</span>
       </div>
     );
   }
@@ -58,7 +61,7 @@ const AiResponseView: React.FC<AiResponseViewProps> = ({ response, isStreaming, 
   return (
     <div className="ai-response" ref={scrollRef}>
       {response && !isStreaming && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+        <div className="ai-response-actions">
           <CopyButton text={response} label="Copy All" />
         </div>
       )}

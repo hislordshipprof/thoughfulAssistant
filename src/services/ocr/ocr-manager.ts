@@ -2,156 +2,73 @@ import { EventEmitter } from 'events';
 import { OcrEngine } from './ocr-engine';
 import { captureScreen, CapturedScreen } from './screen-capture';
 
-interface StealthToggle {
-  removeStealthMode(): void;
-  applyStealthMode(): void;
-}
-
 export class OcrManager extends EventEmitter {
-  private engine: OcrEngine;
+  private engine = new OcrEngine();
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private intervalMs: number;
-  private lastText = '';
-  private lastCapture: CapturedScreen | null = null;
+  private displayId = 'cursor';
   private captures: { image: CapturedScreen; text: string }[] = [];
-  private stealthToggle: StealthToggle | null = null;
+  private busy = false;
+  private revision = 0;
+  private captureGuard = (take: () => Promise<CapturedScreen>) => take();
 
-  constructor(intervalSeconds: number = 30) {
-    super();
-    this.engine = new OcrEngine();
-    this.intervalMs = intervalSeconds * 1000;
-  }
+  constructor(intervalSeconds = 30) { super(); this.intervalMs = intervalSeconds * 1000; }
+  setCaptureGuard(guard: (take: () => Promise<CapturedScreen>) => Promise<CapturedScreen>) { this.captureGuard = guard; }
+  setDisplay(id: string) { this.displayId = id; }
+  async initialize() { await this.engine.initialize(); this.emit('ready'); }
 
-  setStealthToggle(toggle: StealthToggle): void {
-    this.stealthToggle = toggle;
-  }
-
-  async initialize(): Promise<void> {
-    await this.engine.initialize();
-    this.emit('ready');
-  }
-
-  startPeriodicCapture(): void {
+  startPeriodicCapture() {
     if (this.intervalHandle) return;
-
-    this.intervalHandle = setInterval(async () => {
-      try {
-        await this.captureAndRecognize();
-      } catch (err) {
-        this.emit('error', err);
-      }
+    this.intervalHandle = setInterval(() => {
+      if (!this.busy) void this.captureWithOcrPromise({ replace: true, allowPermissionPrompt: false }).catch(error => {
+        if (error?.code === 'SCREEN_PERMISSION_REQUIRED') this.stopPeriodicCapture();
+        this.emit('error', error);
+      });
     }, this.intervalMs);
   }
+  stopPeriodicCapture() {
+    if (this.intervalHandle) clearInterval(this.intervalHandle);
+    this.intervalHandle = null;
+  }
+  async captureNow() { await this.captureWithOcrPromise(); }
 
-  stopPeriodicCapture(): void {
-    if (this.intervalHandle) {
-      clearInterval(this.intervalHandle);
-      this.intervalHandle = null;
+  async captureWithOcrPromise(options: { replace?: boolean; recognize?: boolean; allowPermissionPrompt?: boolean } = {}): Promise<string> {
+    if (this.busy) throw new Error('A screen capture is already in progress.');
+    this.busy = true;
+    const revision = this.revision;
+    try {
+      const captured = await this.captureGuard(() => captureScreen(this.displayId, { allowPermissionPrompt: options.allowPermissionPrompt }));
+      if (revision !== this.revision) throw new Error('Screen capture cancelled.');
+      const entry = { image: captured, text: '' };
+      this.captures = options.replace ? [entry] : [...this.captures.slice(-2), entry];
+      this.emit('screenshots', this.captures.map(item => item.image.imageDataUrl));
+      if (options.recognize !== false) entry.text = await this.engine.recognize(captured.ocrDataUrl);
+      if (revision !== this.revision) throw new Error('Screen capture cancelled.');
+      this.emit('ocr-result', { text: entry.text, timestamp: captured.timestamp });
+      return entry.text;
+    } finally { this.busy = false; }
+  }
+
+  async ensureTextForCaptures() {
+    for (const entry of this.captures) {
+      if (!entry.text) entry.text = await this.engine.recognize(entry.image.ocrDataUrl);
     }
   }
-
-  /**
-   * On-demand capture triggered by hotkey.
-   * Returns as soon as the screenshot is taken (fast).
-   * OCR runs in the background — text available later via getCombinedText().
-   */
-  async captureNow(): Promise<void> {
-    await this.captureWithOcrPromise();
+  cancelPending() { this.revision++; }
+  getLastText() { return this.captures.at(-1)?.text || ''; }
+  getLastCapture() { return this.captures.at(-1)?.image || null; }
+  getAllCaptures() { return this.captures; }
+  getCombinedText() {
+    return this.captures.map((entry, index) => '[Screen capture ' + (index + 1) + ']\n' + entry.text).join('\n\n');
   }
-
-  /**
-   * Capture screenshot (returns fast for thumbnail) and run OCR in background.
-   * Returns a promise that resolves when OCR completes, so callers can optionally await it.
-   */
-  async captureWithOcrPromise(): Promise<string> {
-    // Phase 1: Capture screenshot (fast ~100ms)
-    const captured = await captureScreen();
-    this.lastCapture = captured;
-
-    // Store immediately with empty text — image is available for preview
-    const captureIndex = this.captures.length;
-    this.captures.push({ image: captured, text: '' });
-    console.log(`[ocr] Capture #${this.captures.length} image ready, starting OCR in background...`);
-
-    // Phase 2: OCR in background — return the promise so callers can await if needed
-    return this.engine.recognize(captured.ocrDataUrl).then(text => {
-      if (captureIndex < this.captures.length) {
-        this.captures[captureIndex].text = text;
-        this.lastText = text;
-      }
-      console.log(`[ocr] Capture #${captureIndex + 1} OCR complete (${text.length} chars)`);
-      this.emit('ocr-result', { text, timestamp: captured.timestamp });
-      return text;
-    }).catch(err => {
-      console.error(`[ocr] OCR failed for capture #${captureIndex + 1}:`, err);
-      this.emit('error', err);
-      return '';
-    });
+  removeCapture(index: number) {
+    if (Number.isInteger(index) && index >= 0 && index < this.captures.length) this.captures.splice(index, 1);
   }
-
-  /** Full capture + OCR (blocking) — waits for OCR to complete before returning */
-  async captureAndRecognize(): Promise<string> {
-    const captured = await captureScreen();
-    this.lastCapture = captured;
-
-    const text = await this.engine.recognize(captured.ocrDataUrl);
-    this.lastText = text;
-
-    this.captures.push({ image: captured, text });
-    console.log(`[ocr] Capture #${this.captures.length} stored (${text.length} chars)`);
-
-    this.emit('ocr-result', { text, timestamp: captured.timestamp });
-    return text;
-  }
-
-  getLastText(): string {
-    return this.lastText;
-  }
-
-  getLastCapture(): CapturedScreen | null {
-    return this.lastCapture;
-  }
-
-  getAllCaptures(): { image: CapturedScreen; text: string }[] {
-    return this.captures;
-  }
-
-  getCombinedText(): string {
-    if (this.captures.length === 0) return '';
-    if (this.captures.length === 1) return this.captures[0].text;
-    return this.captures
-      .map((c, i) => `[Screenshot ${i + 1}]\n${c.text}`)
-      .join('\n\n');
-  }
-
-  removeCapture(index: number): void {
-    if (index >= 0 && index < this.captures.length) {
-      this.captures.splice(index, 1);
-      console.log(`[ocr] Removed capture #${index + 1}, ${this.captures.length} remaining`);
-    }
-  }
-
-  clearCaptures(): void {
-    this.captures = [];
-    this.lastCapture = null;
-    this.lastText = '';
-    console.log('[ocr] All captures cleared');
-  }
-
-  getCaptureCount(): number {
-    return this.captures.length;
-  }
-
-  setInterval(seconds: number): void {
+  clearCaptures() { this.revision++; this.captures = []; }
+  getCaptureCount() { return this.captures.length; }
+  setInterval(seconds: number) {
     this.intervalMs = seconds * 1000;
-    if (this.intervalHandle) {
-      this.stopPeriodicCapture();
-      this.startPeriodicCapture();
-    }
+    if (this.intervalHandle) { this.stopPeriodicCapture(); this.startPeriodicCapture(); }
   }
-
-  async terminate(): Promise<void> {
-    this.stopPeriodicCapture();
-    await this.engine.terminate();
-  }
+  async terminate() { this.stopPeriodicCapture(); this.cancelPending(); await this.engine.terminate(); }
 }

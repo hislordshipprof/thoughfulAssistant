@@ -1,18 +1,7 @@
 import Store from 'electron-store';
 import { ConfigSchema, AppConfig } from './config-schema';
 import { defaultConfig } from './default-config';
-
-// Map left/right-specific VK codes to their generic equivalents.
-// Raw Input reports generic codes (0x11=VK_CONTROL, 0x10=VK_SHIFT, 0x12=VK_MENU)
-// but older configs may have stored left-specific codes (0xA2, 0xA0, 0xA4).
-const VK_MIGRATION: Record<number, number> = {
-  0xA0: 0x10, // VK_LSHIFT   → VK_SHIFT
-  0xA1: 0x10, // VK_RSHIFT   → VK_SHIFT
-  0xA2: 0x11, // VK_LCONTROL → VK_CONTROL
-  0xA3: 0x11, // VK_RCONTROL → VK_CONTROL
-  0xA4: 0x12, // VK_LMENU    → VK_MENU
-  0xA5: 0x12, // VK_RMENU    → VK_MENU
-};
+import { migrateControls } from '../../shared/controls';
 
 export class ConfigStore {
   private store: Store<AppConfig>;
@@ -22,51 +11,40 @@ export class ConfigStore {
       name: 'interview-overlay-config',
       defaults: defaultConfig
     });
-    this.migrateHotkeys();
-    this.fillMissingHotkeys();
+    this.fillMissingAiSettings();
+    const audio = ConfigSchema.shape.audio.parse(this.store.get('audio'));
+    if (process.platform === 'darwin' && !audio.macDefaultsApplied) {
+      const hasKey = audio.transcriptionMode === 'deepgram' ? audio.deepgramKey || process.env.DEEPGRAM_API_KEY
+        : audio.transcriptionMode === 'groq-whisper' ? audio.groqKey || process.env.GROQ_API_KEY
+        : audio.transcriptionMode === 'google-stt' ? audio.googleSttKey || process.env.GOOGLE_STT_API_KEY
+        : this.store.get('ai').openaiKey || process.env.OPENAI_API_KEY;
+      if (!hasKey) audio.transcriptionMode = 'macos-speech';
+      audio.macDefaultsApplied = true;
+    }
+    this.store.set('audio', audio);
+    this.store.set('ocr', ConfigSchema.shape.ocr.parse(this.store.get('ocr')));
+    const hotkeys = migrateControls(this.store.get('hotkeys'), process.platform, this.store.get('controlsVersion'));
+    if (JSON.stringify(hotkeys) !== JSON.stringify(this.store.get('hotkeys'))) this.store.set('hotkeys', hotkeys);
+    this.store.set('controlsVersion', 1);
+    this.store.set('overlay', ConfigSchema.shape.overlay.parse(this.store.get('overlay')));
   }
 
-  /** Backfill any hotkey entries added in newer versions but missing from saved config. */
-  private fillMissingHotkeys(): void {
-    const hotkeys = this.store.get('hotkeys') as Record<string, any>;
-    const defaults = defaultConfig.hotkeys as Record<string, any>;
+  /** Backfill provider settings introduced after an existing config was saved. */
+  private fillMissingAiSettings(): void {
+    const ai = this.store.get('ai') as Record<string, any>;
+    const defaults = defaultConfig.ai as Record<string, any>;
     let changed = false;
 
-    for (const [name, binding] of Object.entries(defaults)) {
-      if (!hotkeys[name]) {
-        hotkeys[name] = binding;
+    for (const [key, value] of Object.entries(defaults)) {
+      if (ai[key] === undefined) {
+        ai[key] = value;
         changed = true;
-        console.log(`[config] Added missing hotkey: ${name}`);
       }
     }
 
     if (changed) {
-      this.store.set('hotkeys', hotkeys as any);
-    }
-  }
-
-  /** Fix stale left/right-specific VK codes in persisted hotkeys. */
-  private migrateHotkeys(): void {
-    const hotkeys = this.store.get('hotkeys');
-    if (!hotkeys) return;
-
-    let changed = false;
-    for (const [name, binding] of Object.entries(hotkeys)) {
-      const migrated = binding.vkCodes.map((vk: number) => {
-        const generic = VK_MIGRATION[vk];
-        if (generic !== undefined) {
-          changed = true;
-          return generic;
-        }
-        return vk;
-      });
-      if (changed) {
-        (hotkeys as any)[name] = { ...binding, vkCodes: migrated };
-      }
-    }
-    if (changed) {
-      this.store.set('hotkeys', hotkeys);
-      console.log('[config] Migrated hotkey VK codes to generic values');
+      this.store.set('ai', ai as any);
+      console.log('[config] Added missing AI provider settings');
     }
   }
 
@@ -82,7 +60,7 @@ export class ConfigStore {
     const result = ConfigSchema.safeParse(fullConfig);
 
     if (result.success) {
-      this.store.set(key, value);
+      this.store.set(key, result.data[key]);
     } else {
       throw new Error(`Invalid config for ${key}: ${result.error.message}`);
     }

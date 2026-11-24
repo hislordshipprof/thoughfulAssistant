@@ -4,22 +4,41 @@ copyright: Copyright © 2024
 directories:
   output: release
   buildResources: assets
+npmRebuild: false
+extraResources:
+  - from: eng.traineddata
+    to: ocr/eng.traineddata
 files:
   - out/**/*
-  - "!node_modules/**/*"
-  - node_modules/electron-store/**/*
-  - node_modules/node-addon-api/**/*
-extraResources:
-  - from: src/native/build/Release/
-    to: native/
-    filter:
-      - "*.node"
 win:
   target:
     - target: nsis
       arch:
         - x64
   icon: assets/icons/app-icon.ico
+  extraResources:
+    - from: src/native/build/Release/
+      to: native/
+      filter:
+        - "*.node"
+mac:
+  minimumSystemVersion: '13.0'
+  extraResources:
+    - from: build/mac/overlay-audio
+      to: native/overlay-audio
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  extendInfo:
+    NSMicrophoneUsageDescription: InterviewOverlay uses microphone audio for transcription.
+    NSScreenCaptureUsageDescription: InterviewOverlay captures the screen when you request OCR context.
+    NSSpeechRecognitionUsageDescription: InterviewOverlay transcribes audio on this Mac when you select local speech recognition.
+    NSAudioCaptureUsageDescription: InterviewOverlay captures system audio when you enable System audio and start recording.
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

@@ -5,14 +5,9 @@ import { GroqWhisperService } from './groq-whisper-service';
 import { GoogleSttService } from './google-stt-service';
 import { TranscriptStore, TranscriptEntry } from './transcript-store';
 import { AudioRingBuffer } from './audio-buffer';
+import type { CaptureBackend, CaptureOptions } from './capture-backend';
 
-type TranscriptionMode = 'realtime' | 'whisper' | 'deepgram' | 'groq-whisper' | 'google-stt';
-
-interface NativeAddon {
-  startCapture(loopbackCb: (chunk: any) => void, micCb: (chunk: any) => void): boolean;
-  stopCapture(): boolean;
-  isCapturing(): boolean;
-}
+type TranscriptionMode = 'realtime' | 'whisper' | 'deepgram' | 'groq-whisper' | 'google-stt' | 'macos-speech';
 
 // Common interface for all STT providers
 interface SttProvider extends EventEmitter {
@@ -26,12 +21,15 @@ interface SttProvider extends EventEmitter {
 const TURN_GAP_MS = 1500;
 
 export class AudioManager extends EventEmitter {
-  private native: NativeAddon;
+  private native: CaptureBackend;
   private sttProvider: SttProvider | null = null;
   private transcriptStore: TranscriptStore;
   private loopbackBuffer: AudioRingBuffer;
   private micBuffer: AudioRingBuffer;
   private isRunning = false;
+  private starting = false;
+  private generation = 0;
+  private captureOptions: CaptureOptions = { captureMicrophone: true, captureSystemAudio: true };
 
   // Track partial (delta) entry IDs per source
   private partialIds: Record<'system' | 'mic', string | null> = { system: null, mic: null };
@@ -42,64 +40,90 @@ export class AudioManager extends EventEmitter {
   // Track last source that produced a transcription (for source-change detection)
   private lastTranscriptionSource: 'system' | 'mic' | null = null;
 
-  constructor(native: NativeAddon) {
+  constructor(native: CaptureBackend) {
     super();
     this.native = native;
     this.transcriptStore = new TranscriptStore(15);
     this.loopbackBuffer = new AudioRingBuffer(24000 * 60);  // 1 min at 24kHz
     this.micBuffer = new AudioRingBuffer(24000 * 60);
+    native.on?.('transcription', (event: TranscriptionEvent) => {
+      if (this.isRunning || this.starting) this.handleTranscription(event);
+    });
+    native.on?.('level', level => {
+      if (this.isRunning || this.starting) this.emit('level', level);
+    });
+    native.on?.('error', error => {
+      if (!this.isRunning && !this.starting) return;
+      this.stop(); this.emit('error', error);
+    });
   }
 
   async start(
     apiKey: string,
     mode: TranscriptionMode = 'deepgram',
-    keys?: { deepgramKey?: string; groqKey?: string; googleSttKey?: string; googleProjectId?: string }
+    keys?: { deepgramKey?: string; groqKey?: string; googleSttKey?: string; googleProjectId?: string },
+    options: CaptureOptions = { captureMicrophone: true, captureSystemAudio: true }
   ): Promise<void> {
-    if (this.isRunning) return;
+    if (this.isRunning || this.starting) return;
+    if (!options.captureMicrophone && !options.captureSystemAudio) throw new Error('Enable at least one audio source in Settings.');
+    const generation = ++this.generation;
+    this.starting = true;
+    this.captureOptions = options;
+    this.emit('state');
+    try {
+    if (mode === 'macos-speech' && !this.native.supportsLocalSpeech) throw new Error('On-device Mac speech is only available on macOS.');
     console.log(`[audio] Starting audio capture, transcription mode: ${mode}`);
 
     // Create the appropriate STT provider
-    this.sttProvider = this.createProvider(mode, apiKey, keys);
+    this.sttProvider = mode === 'macos-speech' ? null : this.createProvider(mode, apiKey, keys);
 
     // Wire up common events
-    this.sttProvider.on('speech_started', (_source: 'system' | 'mic') => {
+    this.sttProvider?.on('speech_started', (_source: 'system' | 'mic') => {
       // Speech started — accumulation continues into current entry
     });
 
-    this.sttProvider.on('speech_stopped', (_source: 'system' | 'mic') => {
+    this.sttProvider?.on('speech_stopped', (_source: 'system' | 'mic') => {
       // Don't immediately reset accumulation — brief pauses (300ms–2s) are normal mid-sentence.
       // Turn boundaries are detected by time gap (TURN_GAP_MS) and source changes instead.
     });
 
-    this.sttProvider.on('transcription', (event: TranscriptionEvent) => {
-      this.handleTranscription(event);
+    this.sttProvider?.on('transcription', (event: TranscriptionEvent) => {
+      if (generation === this.generation) this.handleTranscription(event);
     });
 
-    this.sttProvider.on('error', (err: Error) => {
+    this.sttProvider?.on('error', (err: Error) => {
+      if (generation !== this.generation) return;
+      this.stop();
       this.emit('error', err);
     });
 
-    this.sttProvider.on('connected', () => {
-      this.emit('transcription-connected');
+    this.sttProvider?.on('connected', () => {
+      if (generation === this.generation) this.emit('transcription-connected');
     });
 
-    // Start native audio capture
-    console.log('[audio] Starting native WASAPI capture...');
-    const started = this.native.startCapture(
-      (chunk) => this.handleLoopbackChunk(chunk),
-      (chunk) => this.handleMicChunk(chunk)
+    await this.sttProvider?.start();
+    if (generation !== this.generation) return;
+    const started = await this.native.startCapture(
+      (chunk) => { if (generation === this.generation) this.handleLoopbackChunk(chunk); },
+      (chunk) => { if (generation === this.generation) this.handleMicChunk(chunk); },
+      { ...options, localSpeech: mode === 'macos-speech' }
     );
 
     if (!started) {
       console.error('[audio] Native capture failed to start');
       throw new Error('Failed to start audio capture');
     }
-    console.log('[audio] Native WASAPI capture started');
-
-    await this.sttProvider.start();
+    if (generation !== this.generation) return;
     this.isRunning = true;
+    this.starting = false;
     console.log('[audio] Audio pipeline fully started');
     this.emit('started');
+    this.emit('state');
+    } catch (error) {
+      if (generation !== this.generation) return; // Stop while permissions/connection were pending.
+      this.stop();
+      throw error;
+    }
   }
 
   private createProvider(
@@ -131,6 +155,7 @@ export class AudioManager extends EventEmitter {
       case 'realtime':
       case 'whisper':
       default:
+        if (!apiKey) throw new Error('OpenAI speech requires an OpenAI API key. Select on-device Mac speech for key-free transcription.');
         console.log(`[audio] Using OpenAI ${mode} STT`);
         return new TranscriptionService(apiKey, mode as 'realtime' | 'whisper');
     }
@@ -138,6 +163,8 @@ export class AudioManager extends EventEmitter {
 
   private handleTranscription(event: TranscriptionEvent): void {
     const src = event.source;
+    if ((src === 'mic' && !this.captureOptions.captureMicrophone) ||
+        (src === 'system' && !this.captureOptions.captureSystemAudio)) return;
 
     if (event.isFinal) {
       const text = event.text?.trim();
@@ -191,19 +218,21 @@ export class AudioManager extends EventEmitter {
   }
 
   stop(): void {
-    if (!this.isRunning) return;
-
+    this.generation++;
     this.native.stopCapture();
     this.sttProvider?.stop();
     this.sttProvider = null;
     this.isRunning = false;
+    this.starting = false;
     this.partialIds = { system: null, mic: null };
     this.accumulationIds = { system: null, mic: null };
     this.lastTranscriptionSource = null;
     this.emit('stopped');
+    this.emit('state');
   }
 
   private handleLoopbackChunk(chunk: { samples: Buffer; sampleRate: number; channels: number; isLoopback: boolean }): void {
+    if (!this.captureOptions.captureSystemAudio) return;
     const samples = new Int16Array(chunk.samples.buffer, chunk.samples.byteOffset, chunk.samples.byteLength / 2);
     this.loopbackBuffer.write(samples);
     this.sttProvider?.sendAudio(samples, 'system');
@@ -211,6 +240,7 @@ export class AudioManager extends EventEmitter {
 
   private micChunkCount = 0;
   private handleMicChunk(chunk: { samples: Buffer; sampleRate: number; channels: number; isLoopback: boolean }): void {
+    if (!this.captureOptions.captureMicrophone) return;
     const samples = new Int16Array(chunk.samples.buffer, chunk.samples.byteOffset, chunk.samples.byteLength / 2);
     this.micChunkCount++;
     // Log every 100 chunks (~1s at typical rates) so we can verify mic data is flowing
@@ -238,6 +268,14 @@ export class AudioManager extends EventEmitter {
 
   isActive(): boolean {
     return this.isRunning;
+  }
+
+  isStarting(): boolean { return this.starting; }
+
+  getState() {
+    return { isRecording: this.isRunning, isStarting: this.starting,
+      microphone: this.isRunning && this.captureOptions.captureMicrophone,
+      systemAudio: this.isRunning && this.captureOptions.captureSystemAudio };
   }
 
   setTranscriptionMode(mode: TranscriptionMode): void {

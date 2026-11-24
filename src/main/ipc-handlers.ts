@@ -1,9 +1,12 @@
-import { ipcMain, BrowserWindow, clipboard } from 'electron';
+import { app, ipcMain, BrowserWindow, clipboard, dialog, shell } from 'electron';
 import { AiManager } from '../services/ai/ai-manager';
 import { AudioManager } from '../services/audio/audio-manager';
 import { OcrManager } from '../services/ocr/ocr-manager';
 import { ConfigStore } from '../services/config/config-store';
 import { WindowManager } from './window-manager';
+import { getOllamaStatus } from '../services/ai/ollama-provider';
+import { listDisplays } from '../services/ocr/screen-capture';
+import { getScreenPermissionStatus, requestScreenPermission } from '../services/ocr/screen-permission';
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
@@ -11,13 +14,24 @@ export function registerIpcHandlers(
   audioManager: AudioManager,
   ocrManager: OcrManager,
   configStore: ConfigStore,
-  windowManager: WindowManager
+  windowManager: WindowManager,
+  controls: { run: (action: string) => Promise<void>; failures: () => string[] }
 ): void {
   // AI handlers
   ipcMain.handle('ai:ask', async (_event, transcript: string, ocrText: string, query?: string) => {
     const cfg = configStore.getAll();
     const interviewMode = cfg.ai.interviewMode || 'general';
-    aiManager.ask(transcript, ocrText, query, interviewMode, cfg.resume, cfg.jobDescription);
+    aiManager.ask(
+      transcript,
+      ocrText,
+      query,
+      interviewMode,
+      cfg.resume,
+      cfg.jobDescription,
+      undefined,
+      cfg.ai.customSystemPrompt,
+      cfg.ai.systemPromptMode
+    );
     return true;
   });
 
@@ -31,7 +45,14 @@ export function registerIpcHandlers(
     return true;
   });
 
+  ipcMain.handle('ai:ollama-status', async (_event, baseUrl?: string) => {
+    const url = baseUrl || configStore.getAll().ai.ollamaUrl;
+    return getOllamaStatus(url);
+  });
+
   // Wire AI events to renderer
+  aiManager.on('stream-start', () => mainWindow.webContents.send('ai:started'));
+  aiManager.on('cancelled', () => mainWindow.webContents.send('ai:cancelled'));
   aiManager.on('token', (token: string) => {
     mainWindow.webContents.send('ai:token', token);
   });
@@ -45,20 +66,10 @@ export function registerIpcHandlers(
   });
 
   // Audio handlers
+  ipcMain.handle('audio:status', () => audioManager.getState());
   ipcMain.handle('audio:toggle', async () => {
-    if (audioManager.isActive()) {
-      audioManager.stop();
-      return false;
-    } else {
-      const config = configStore.getAll();
-      await audioManager.start(config.ai.openaiKey, config.audio.transcriptionMode, {
-        deepgramKey: config.audio.deepgramKey,
-        groqKey: config.audio.groqKey,
-        googleSttKey: config.audio.googleSttKey,
-        googleProjectId: config.audio.googleProjectId
-      });
-      return true;
-    }
+    await controls.run('toggleRecording');
+    return audioManager.isActive();
   });
 
   ipcMain.handle('audio:state', () => {
@@ -71,12 +82,26 @@ export function registerIpcHandlers(
   });
 
   // OCR handlers
+  ipcMain.handle('screen:displays', () => listDisplays());
+  ipcMain.handle('screen:permission-status', () => ({ status: getScreenPermissionStatus(), appVersion: app.getVersion() }));
+  ipcMain.handle('screen:permission-request', async () => ({ status: await requestScreenPermission(), appVersion: app.getVersion() }));
+  ipcMain.handle('screen:permission-settings', async () => {
+    if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+  });
+  ipcMain.handle('app:restart-for-permissions', async () => {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question', title: 'Restart InterviewOverlay?',
+      message: 'Restart to apply macOS permission changes?',
+      detail: 'Saved settings and API keys are kept. Recording will stop, and the current unsaved conversation and captured context will be cleared.',
+      buttons: ['Cancel', 'Restart'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    if (response !== 1) return false;
+    app.relaunch();
+    app.quit();
+    return true;
+  });
   ipcMain.handle('ocr:capture', async () => {
-    await ocrManager.captureNow();
-    // Send all accumulated screenshots to renderer (image available immediately, OCR runs in background)
-    const allCaptures = ocrManager.getAllCaptures();
-    const imageUrls = allCaptures.map(c => c.image.imageDataUrl);
-    mainWindow.webContents.send('ocr:screenshots', imageUrls);
+    await controls.run('captureScreen');
     return true;
   });
 
@@ -112,6 +137,16 @@ export function registerIpcHandlers(
   });
 
   // Window handlers
+  ipcMain.handle('window:state', () => windowManager.getState());
+  ipcMain.handle('controls:failures', () => controls.failures());
+  ipcMain.handle('controls:run', async (_event, action: string, query?: string) => {
+    const allowed = ['chat', 'submitChat', 'askAi', 'captureScreen', 'toggleRecording',
+      'toggleInteract', 'cancelStream', 'resetAll', 'hideOverlay', 'exitTyping'];
+    if (!allowed.includes(action)) throw new Error('Unknown control');
+    if (typeof query === 'string' && action === 'submitChat') aiManager.setExtraContext(query);
+    await controls.run(action);
+  });
+
   ipcMain.handle('window:clickThrough', (_event, enable: boolean) => {
     windowManager.setFullPassthrough(enable);
     return true;

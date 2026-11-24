@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.interview-overlay.audio</string>
+  <key>CFBundleName</key><string>InterviewOverlay Audio</string>
+  <key>NSMicrophoneUsageDescription</key><string>Capture your microphone when you start recording, for live transcription.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Transcribe speech on this Mac when you select local speech recognition.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>Capture call and system audio when you enable System audio.</string>
+  <key>NSAudioCaptureUsageDescription</key><string>Capture system audio only when you enable System audio and start recording.</string>
+</dict></plist>

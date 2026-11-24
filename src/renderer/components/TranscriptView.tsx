@@ -23,14 +23,15 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({ entries }) => {
 
   if (entries.length === 0) {
     return (
-      <div style={{ color: 'rgba(255,255,255,0.3)', padding: '12px', textAlign: 'center' }}>
+      <div className="transcript-empty">
+        <span aria-hidden="true">◎</span>
         Start recording to see the live transcript.
       </div>
     );
   }
 
   return (
-    <div ref={scrollRef} style={{ height: '100%', overflowY: 'auto' }}>
+    <div ref={scrollRef} className="transcript-list">
       {entries.map(entry => (
         <div key={entry.id} className={`transcript-entry ${entry.isFinal ? '' : 'transcript-partial'}`}>
           <span className={`transcript-source ${entry.source}`}>

@@ -1,5 +1,4 @@
 import { Tray, Menu, nativeImage, app } from 'electron';
-import path from 'path';
 
 export class TrayManager {
   private tray: Tray | null = null;
@@ -10,16 +9,18 @@ export class TrayManager {
     onSettings: () => void;
     onQuit: () => void;
   }): Tray {
-    // Try to load custom icon, fallback to a simple one
-    let icon: Electron.NativeImage;
-    try {
-      icon = nativeImage.createFromPath(
-        path.join(__dirname, '../../assets/icons/tray-icon.ico')
-      );
-    } catch {
-      // Create a minimal 16x16 icon
-      icon = nativeImage.createEmpty();
+    // Real monochrome bitmap: an empty NativeImage creates an invisible macOS tray.
+    const pixels = Buffer.alloc(18 * 18 * 4);
+    for (let y = 3; y < 16; y++) {
+      for (let x = 2; x < 16; x++) {
+        const border = y <= 4 || (y <= 12 && (x <= 3 || x >= 14)) || y === 11 || y === 12;
+        const tail = y >= 13 && x >= 4 && x <= 6;
+        const dots = y >= 7 && y <= 8 && [6, 9, 12].includes(x);
+        if (border && y <= 12 || tail || dots) pixels[(y * 18 + x) * 4 + 3] = 255;
+      }
     }
+    const icon = nativeImage.createFromBitmap(pixels, { width: 18, height: 18 });
+    if (process.platform === 'darwin') icon.setTemplateImage(true);
 
     this.tray = new Tray(icon);
     this.tray.setToolTip('Interview Overlay');
@@ -27,13 +28,11 @@ export class TrayManager {
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Toggle Overlay',
-        click: callbacks.onToggleOverlay,
-        accelerator: 'Ctrl+Shift+H'
+        click: callbacks.onToggleOverlay
       },
       {
         label: 'Toggle Recording',
-        click: callbacks.onToggleRecording,
-        accelerator: 'Ctrl+Shift+R'
+        click: callbacks.onToggleRecording
       },
       { type: 'separator' },
       {
@@ -52,9 +51,7 @@ export class TrayManager {
 
     this.tray.setContextMenu(contextMenu);
 
-    this.tray.on('click', () => {
-      callbacks.onToggleOverlay();
-    });
+    if (process.platform !== 'darwin') this.tray.on('click', callbacks.onToggleOverlay);
 
     return this.tray;
   }

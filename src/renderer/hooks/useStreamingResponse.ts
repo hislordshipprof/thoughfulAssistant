@@ -16,11 +16,18 @@ export function useStreamingResponse(appendMode = false) {
   const responseRef = useRef('');
   const streamingRef = useRef(false);
 
+  const onStarted = useCallback(() => {
+    responseRef.current = appendMode && responseRef.current ? responseRef.current + '\n\n---\n\n' : '';
+    streamingRef.current = true;
+    setState({ response: responseRef.current, isStreaming: true, error: null });
+  }, [appendMode]);
+
+  const onCancelled = useCallback(() => {
+    streamingRef.current = false;
+    setState(prev => ({ ...prev, isStreaming: false }));
+  }, []);
+
   const onToken = useCallback((token: string) => {
-    if (appendMode && !streamingRef.current && responseRef.current) {
-      // First token of a new stream with existing content — add prominent separator
-      responseRef.current += '\n\n\n---\n\n\n';
-    }
     streamingRef.current = true;
     responseRef.current += token;
     setState(prev => ({
@@ -29,7 +36,7 @@ export function useStreamingResponse(appendMode = false) {
       isStreaming: true,
       error: null
     }));
-  }, [appendMode]);
+  }, []);
 
   const onDone = useCallback((fullResponse: string) => {
     streamingRef.current = false;
@@ -54,6 +61,8 @@ export function useStreamingResponse(appendMode = false) {
   }, []);
 
   useIpcEvent('onAiToken', onToken);
+  useIpcEvent('onAiStarted', onStarted);
+  useIpcEvent('onAiCancelled', onCancelled);
   useIpcEvent('onAiDone', onDone);
   useIpcEvent('onAiError', onError);
 

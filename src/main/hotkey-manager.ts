@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
+import { globalShortcut } from 'electron';
 import path from 'path';
 import { HotkeyConfig } from '../services/config/config-schema';
+import { acceleratorFor } from '../shared/controls';
 
 let nativeAddon: any;
 try {
@@ -56,6 +58,8 @@ export class HotkeyManager extends EventEmitter {
   private keyState: KeyState = {};
   private isRunning = false;
   private globalHotkeysRegistered = false;
+  private electronAccelerators: string[] = [];
+  private failedShortcuts: string[] = [];
 
   constructor() {
     super();
@@ -75,9 +79,12 @@ export class HotkeyManager extends EventEmitter {
   }
 
   start(): boolean {
-    if (this.isRunning || !nativeAddon) {
-      if (!nativeAddon) console.warn('Native addon unavailable — hotkeys disabled');
+    if (this.isRunning) {
       return false;
+    }
+
+    if (process.platform !== 'win32' || !nativeAddon) {
+      return this.startElectronGlobalShortcuts();
     }
 
     const started = nativeAddon.startRawInputListener((event: {
@@ -100,7 +107,19 @@ export class HotkeyManager extends EventEmitter {
   }
 
   stop(): void {
-    if (!this.isRunning || !nativeAddon) return;
+    if (!this.isRunning) return;
+
+    if (process.platform !== 'win32' || !nativeAddon) {
+      for (const accelerator of this.electronAccelerators) {
+        globalShortcut.unregister(accelerator);
+      }
+      this.electronAccelerators = [];
+      this.globalHotkeysRegistered = false;
+      this.isRunning = false;
+      return;
+    }
+
+    if (!nativeAddon) return;
 
     // Unregister global hotkeys first
     if (this.globalHotkeysRegistered) {
@@ -118,7 +137,12 @@ export class HotkeyManager extends EventEmitter {
   }
 
   private setupGlobalHotkeys(): void {
-    if (!nativeAddon || !this.isRunning) return;
+    if (process.platform !== 'win32' || !nativeAddon) {
+      this.startElectronGlobalShortcuts();
+      return;
+    }
+
+    if (!this.isRunning) return;
 
     // Separate bindings: modifier combos → RegisterHotKey, standalone keys → Raw Input
     const globalHotkeys: { id: number; modifiers: number; vk: number; name: string }[] = [];
@@ -186,6 +210,51 @@ export class HotkeyManager extends EventEmitter {
     if (modifiers === 0) return null; // No modifiers → use Raw Input
     if (vk === 0) return null; // Only modifiers, no main key → skip
     return { modifiers, vk };
+  }
+
+  private startElectronGlobalShortcuts(): boolean {
+    for (const accelerator of this.electronAccelerators) {
+      globalShortcut.unregister(accelerator);
+    }
+    this.electronAccelerators = [];
+    this.failedShortcuts = [];
+
+    for (const binding of this.bindings) {
+      const accelerator = acceleratorFor(binding.vkCodes, process.platform);
+      if (!accelerator) {
+        this.failedShortcuts.push(binding.name);
+        console.warn(`[hotkey] Cannot map ${binding.name} to an Electron accelerator`);
+        continue;
+      }
+
+      // Never swallow bare Escape across every app on macOS. It is handled locally.
+      if (process.platform === 'darwin' && accelerator === 'Escape') continue;
+      let registered = false;
+      try {
+        registered = globalShortcut.register(accelerator, () => {
+          console.log(`[hotkey] Electron global shortcut fired: ${binding.name}`);
+          this.emit('hotkey', binding.name);
+        });
+      } catch (error) {
+        console.warn(`[hotkey] Invalid shortcut for ${binding.name}:`, error);
+      }
+
+      if (registered) {
+        this.electronAccelerators.push(accelerator);
+      } else {
+        this.failedShortcuts.push(binding.name);
+        console.warn(`[hotkey] Could not register ${binding.name}: ${accelerator}`);
+      }
+    }
+
+    this.isRunning = true;
+    this.globalHotkeysRegistered = this.electronAccelerators.length > 0;
+    console.log(`[hotkey] Registered ${this.electronAccelerators.length} Electron global shortcuts`);
+    return this.globalHotkeysRegistered;
+  }
+
+  getFailedShortcuts(): string[] {
+    return [...this.failedShortcuts];
   }
 
   private handleKeyEvent(event: { vkCode: number; isKeyDown: boolean }): void {

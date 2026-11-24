@@ -1,5 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'path';
+import { EventEmitter } from 'events';
+import type { WindowState } from '../shared/controls';
 
 let nativeAddon: any;
 try {
@@ -8,16 +10,17 @@ try {
   try {
     nativeAddon = require(path.join(process.resourcesPath, 'native', 'native_addon.node'));
   } catch {
-    console.warn('Native addon not available — stealth features disabled');
+    console.warn('Native addon unavailable — using Electron window privacy controls');
     nativeAddon = null;
   }
 }
 
-export class WindowManager {
+export class WindowManager extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
-  private isStealthActive = false;
+  private protectionRequested = true;
+  private protectionState: WindowState['contentProtection'] = 'unavailable';
   private isFullPassthrough = false;
-  private isVisible = true;
+  private visibilityRevision = 0;
 
   createOverlayWindow(config: {
     width: number;
@@ -25,6 +28,8 @@ export class WindowManager {
     x: number;
     y: number;
     opacity: number;
+    captureProtection?: boolean;
+    clickThrough?: boolean;
   }): BrowserWindow {
     const display = screen.getPrimaryDisplay();
     const { width: screenW, height: screenH } = display.workAreaSize;
@@ -42,6 +47,7 @@ export class WindowManager {
       hasShadow: false,
       opacity: config.opacity,
       focusable: false,
+      show: false,
       webPreferences: {
         preload: path.join(__dirname, '../preload/preload.js'),
         contextIsolation: true,
@@ -52,21 +58,28 @@ export class WindowManager {
 
     // Set always on top with highest level
     this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    this.mainWindow.setVisibleOnAllWorkspaces(true);
+    this.mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-    // Apply stealth mode via native addon
-    this.applyStealthMode();
+    // Request platform capture protection before the first visible frame.
+    this.setContentProtection(config.captureProtection ?? true);
 
     // Subclass window so clicks on overlay never steal focus from other apps
     this.subclassForNoActivate();
 
     // Start in smart hit-test mode: preload toggles setIgnoreMouseEvents
     // dynamically based on whether mouse is over a UI element or transparent area
-    this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    this.setFullPassthrough(config.clickThrough ?? false);
+    this.setPosition(config.x, config.y);
+    this.mainWindow.on('show', () => this.emitState());
+    this.mainWindow.on('hide', () => {
+      this.setFocusableForInput(false);
+      this.emitState();
+    });
+    this.mainWindow.once('ready-to-show', () => this.stealthShow());
 
-    // Reapply display affinity safely on restore (uses safeShow path)
+    // Reapply the user's requested protection state on restore.
     this.mainWindow.on('restore', () => {
-      this.stealthShow();
+      this.reapplyDisplayAffinity();
     });
 
     this.mainWindow.on('closed', () => {
@@ -77,11 +90,29 @@ export class WindowManager {
   }
 
   applyStealthMode(): void {
-    if (!this.mainWindow || !nativeAddon) return;
+    this.setContentProtection(true);
+  }
 
-    const hwnd = this.mainWindow.getNativeWindowHandle();
-    nativeAddon.applyStealthMode(hwnd);
-    this.isStealthActive = true;
+  setContentProtection(enabled: boolean): void {
+    this.protectionRequested = enabled;
+    if (!this.mainWindow) return;
+    try {
+      this.mainWindow.setContentProtection(enabled);
+      if (process.platform === 'win32' && nativeAddon) {
+        const hwnd = this.mainWindow.getNativeWindowHandle();
+        if (enabled) nativeAddon.applyStealthMode(hwnd);
+        else nativeAddon.removeStealthMode(hwnd);
+      }
+      // Electron 33 has the setter but no getter. Successful submission still
+      // only means "requested", never verified exclusion by a capture app.
+      const getter = (this.mainWindow as BrowserWindow & { isContentProtected?: () => boolean }).isContentProtected;
+      const supported = getter ? getter.call(this.mainWindow) : ['darwin', 'win32'].includes(process.platform);
+      this.protectionState = !enabled ? 'off' : supported ? 'requested' : 'unavailable';
+    } catch (error) {
+      this.protectionState = 'unavailable';
+      console.warn('[window] Content protection unavailable:', error);
+    }
+    this.emitState();
   }
 
   private subclassForNoActivate(): void {
@@ -93,18 +124,11 @@ export class WindowManager {
   }
 
   removeStealthMode(): void {
-    if (!this.mainWindow || !nativeAddon) return;
-
-    const hwnd = this.mainWindow.getNativeWindowHandle();
-    nativeAddon.removeStealthMode(hwnd);
-    this.isStealthActive = false;
+    this.setContentProtection(false);
   }
 
   reapplyDisplayAffinity(): void {
-    if (!this.mainWindow || !nativeAddon) return;
-
-    const hwnd = this.mainWindow.getNativeWindowHandle();
-    nativeAddon.reapplyDisplayAffinity(hwnd);
+    this.setContentProtection(this.protectionRequested);
   }
 
   /**
@@ -120,12 +144,12 @@ export class WindowManager {
       nativeAddon.setClickThrough(hwnd, enable);
     }
 
-    if (enable) {
-      this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
-    }
-    // When disabling, the preload smart hit-test resumes toggling dynamically
+    this.mainWindow.setIgnoreMouseEvents(enable, { forward: true });
+    if (enable) this.setFocusableForInput(false);
 
     this.isFullPassthrough = enable;
+    this.mainWindow.webContents.send('window:hit-test-reset');
+    this.emitState();
     console.log(`[window] Full passthrough: ${enable}`);
   }
 
@@ -148,35 +172,53 @@ export class WindowManager {
     if (!this.mainWindow) return;
     this.mainWindow.setFocusable(enable);
     if (enable) {
+      if (!this.mainWindow.isVisible()) this.stealthShow();
+      if (this.isFullPassthrough) this.setFullPassthrough(false);
       this.mainWindow.focus();
-    }
+    } else if (this.mainWindow.isFocused()) this.mainWindow.blur();
     console.log(`[window] Focusable for input: ${enable}`);
   }
 
   /**
-   * Show the window without flashing on screen share.
-   * Sets opacity to 0 before showing so the window is invisible while
-   * display affinity (WDA_EXCLUDEFROMCAPTURE) is reapplied, then restores opacity.
+   * Reapply the requested capture flag before showing without stealing focus.
+   * This is not a guarantee that third-party capture software excludes it.
    */
   stealthShow(): void {
     if (!this.mainWindow) return;
+    this.visibilityRevision++;
 
-    const savedOpacity = this.mainWindow.getOpacity();
-    this.mainWindow.setOpacity(0);
-    this.mainWindow.show();
     this.reapplyDisplayAffinity();
-    this.mainWindow.setOpacity(savedOpacity);
+    this.mainWindow.showInactive();
   }
 
   toggleVisibility(): void {
     if (!this.mainWindow) return;
 
-    if (this.isVisible) {
-      this.mainWindow.hide();
+    if (this.mainWindow.isVisible()) {
+      this.hide();
     } else {
       this.stealthShow();
     }
-    this.isVisible = !this.isVisible;
+  }
+
+  hide(): void {
+    this.visibilityRevision++;
+    this.mainWindow?.hide();
+  }
+
+  async withoutOverlay<T>(take: () => Promise<T>): Promise<T> {
+    const win = this.mainWindow;
+    const visible = win?.isVisible();
+    const revision = this.visibilityRevision;
+    // Hide only for our own screenshot, not as a third-party capture bypass.
+    if (visible) win?.hide();
+    try {
+      if (visible) await new Promise(resolve => setTimeout(resolve, 180));
+      return await take();
+    } finally {
+      // A user Hide/Quit during capture wins over automatic restoration.
+      if (visible && win && !win.isDestroyed() && revision === this.visibilityRevision) this.stealthShow();
+    }
   }
 
   toggleInteractMode(): void {
@@ -192,13 +234,20 @@ export class WindowManager {
   }
 
   setPosition(x: number, y: number): void {
-    this.mainWindow?.setPosition(x, y);
+    if (!this.mainWindow) return;
+    const bounds = this.mainWindow.getBounds();
+    const area = screen.getDisplayMatching({ ...bounds, x, y }).workArea;
+    // Keep the drag handle and recovery buttons reachable on the target display.
+    this.mainWindow.setPosition(
+      Math.round(Math.max(area.x, Math.min(x, area.x + area.width - bounds.width))),
+      Math.round(Math.max(area.y, Math.min(y, area.y + area.height - Math.min(bounds.height, area.height))))
+    );
   }
 
   moveBy(dx: number, dy: number): void {
     if (!this.mainWindow) return;
     const [x, y] = this.mainWindow.getPosition();
-    this.mainWindow.setPosition(x + dx, y + dy);
+    this.setPosition(x + dx, y + dy);
   }
 
   setSize(width: number, height: number): void {
@@ -210,7 +259,26 @@ export class WindowManager {
   }
 
   isStealthEnabled(): boolean {
-    return this.isStealthActive;
+    return this.protectionState === 'requested';
+  }
+
+  getState(): WindowState {
+    return {
+      visible: this.mainWindow?.isVisible() ?? false,
+      passthrough: this.isFullPassthrough,
+      contentProtection: this.protectionState,
+      protectionNote: process.platform === 'darwin'
+        ? 'Best effort only: macOS ScreenCaptureKit apps can still capture this overlay. Test your sharing setup. The app remains visible in Activity Monitor.'
+        : 'Capture exclusion is requested from the OS, not verified for your recording software. Test before sharing.'
+    };
+  }
+
+  private emitState(): void {
+    const state = this.getState();
+    this.emit('state', state);
+    if (this.mainWindow && !this.mainWindow.webContents.isDestroyed()) {
+      this.mainWindow.webContents.send('window:state', state);
+    }
   }
 
   getNativeAddon(): any {

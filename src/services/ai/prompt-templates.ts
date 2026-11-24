@@ -158,7 +158,15 @@ NEVER:
   - Output multiple sentences on the same line`;
 
 
-export function getSystemPrompt(mode: string, resume?: string, jobDescription?: string): string {
+export type SystemPromptMode = 'default' | 'append' | 'replace';
+
+export function getSystemPrompt(
+  mode: string,
+  resume?: string,
+  jobDescription?: string,
+  customSystemPrompt?: string,
+  systemPromptMode: SystemPromptMode = 'default'
+): string {
   let preamble = '';
 
   if (resume) {
@@ -169,10 +177,17 @@ export function getSystemPrompt(mode: string, resume?: string, jobDescription?: 
     preamble += `═══ TARGET ROLE (JOB DESCRIPTION) ═══\nI am interviewing for the following role. Tailor responses to align my experience with this role's requirements when relevant.\n\n${jobDescription}\n\n`;
   }
 
-  switch (mode) {
-    case 'leetcode': return preamble + LEETCODE_SYSTEM_PROMPT;
-    default: return preamble + SYSTEM_PROMPT;
+  const builtInPrompt = mode === 'leetcode' ? LEETCODE_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const customPrompt = customSystemPrompt?.trim() || '';
+
+  // Empty custom text always falls back to the existing prompt. The Settings
+  // UI prevents saving an empty Append/Replace selection, but this keeps old
+  // or manually edited config files safe and useful.
+  if (systemPromptMode === 'replace' && customPrompt) return customPrompt;
+  if (systemPromptMode === 'append' && customPrompt) {
+    return `${preamble}${builtInPrompt}\n\n═══ CUSTOM SYSTEM INSTRUCTIONS ═══\n${customPrompt}`;
   }
+  return preamble + builtInPrompt;
 }
 
 export function buildContextMessage(

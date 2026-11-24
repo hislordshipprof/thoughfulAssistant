@@ -1,14 +1,23 @@
 {
   "name": "interview-overlay",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Invisible AI-powered interview assistant overlay",
   "main": "out/main/main.js",
   "private": true,
   "scripts": {
+    "install": "node scripts/install-native.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "test:controls": "node scripts/test-controls.cjs",
+    "test:media": "node scripts/test-media.cjs",
+    "test:groq": "node scripts/test-groq.cjs",
+    "test:anthropic": "node scripts/test-anthropic.cjs",
+    "test:prompt": "node scripts/test-prompt.cjs",
+    "test:permissions": "node scripts/test-screen-permission.cjs",
+    "build:mac-audio": "node scripts/build-mac-audio.cjs",
     "preview": "electron-vite preview",
     "package": "electron-builder --win",
+    "package:mac": "node scripts/package-mac.js",
     "rebuild": "node scripts/rebuild-native.js"
   },
   "dependencies": {

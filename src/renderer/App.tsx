@@ -4,171 +4,133 @@ import SettingsModal from './components/SettingsModal';
 import { useStreamingResponse } from './hooks/useStreamingResponse';
 import { useHotkeys } from './hooks/useHotkeys';
 import { useIpcEvent } from './hooks/useIpc';
+import { defaultHotkeys, type ShortcutBinding, type WindowState } from '../shared/controls';
+import type { AudioState, AudioLevel, ScreenState } from '../shared/media';
 
 const App: React.FC = () => {
-  const [interviewMode, setInterviewMode] = useState<string>('general');
+  const [interviewMode, setInterviewMode] = useState('general');
   const { response, isStreaming, error, reset } = useStreamingResponse(interviewMode === 'leetcode');
   const [transcriptEntries, setTranscriptEntries] = useState<any[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPassthrough, setIsPassthrough] = useState(false);
+  const [audioState, setAudioState] = useState<AudioState>({ isRecording: false, isStarting: false, microphone: false, systemAudio: false });
+  const [audioLevels, setAudioLevels] = useState({ mic: 0, system: 0 });
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [screenState, setScreenState] = useState<ScreenState>({ busy: false, message: '' });
   const [aiProvider, setAiProvider] = useState<string | null>(null);
-  const [isStealthActive, setIsStealthActive] = useState(true);
+  const [windowState, setWindowState] = useState<WindowState | null>(null);
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [extraContext, setExtraContext] = useState('');
   const [isTypingMode, setIsTypingMode] = useState(false);
+  const [controlError, setControlError] = useState<string | null>(null);
+  const [hotkeys, setHotkeys] = useState<Record<string, ShortcutBinding>>(() => defaultHotkeys(window.electronAPI.platform));
+  const [shortcutFailures, setShortcutFailures] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const isPassthrough = windowState?.passthrough ?? false;
 
-  // Listen for transcript updates
-  useIpcEvent('onTranscriptUpdate', useCallback((entries: any[]) => {
-    setTranscriptEntries(entries);
+  const runControl = useCallback(async (action: string, query?: string) => {
+    setControlError(null);
+    if (action === 'toggleRecording') setAudioError(null);
+    try { await window.electronAPI.runControl(action, query); }
+    catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (action === 'toggleRecording') setAudioError(message); else setControlError(message);
+    }
+  }, []);
+
+  useIpcEvent('onTranscriptUpdate', setTranscriptEntries);
+  useIpcEvent('onScreenshots', setScreenshots);
+  useIpcEvent('onWindowState', setWindowState);
+  useIpcEvent('onAudioStatus', useCallback((state: AudioState) => {
+    setAudioState(state);
+    if (state.isStarting || state.isRecording) setAudioError(null);
+    if (!state.isRecording) setAudioLevels({ mic: 0, system: 0 });
   }, []));
-
-  // Listen for status updates
+  useIpcEvent('onAudioLevel', useCallback((event: AudioLevel) => setAudioLevels(prev => ({ ...prev, [event.source]: event.level })), []));
+  useIpcEvent('onAudioError', setAudioError);
+  useIpcEvent('onScreenState', setScreenState);
   useIpcEvent('onStatusUpdate', useCallback((status: any) => {
-    setIsRecording(status.isRecording ?? false);
-    setAiProvider(status.aiProvider ?? null);
-    setIsStealthActive(status.isStealthActive ?? true);
+    if (status.aiProvider !== undefined) setAiProvider(status.aiProvider);
   }, []));
-
-  // Listen for screenshot captures (array of all accumulated screenshots)
-  useIpcEvent('onScreenshots', useCallback((dataUrls: string[]) => {
-    setScreenshots(dataUrls);
-  }, []));
-
-  // Typing mode — keystroke injection from native LL hook
   useIpcEvent('onTypingMode', useCallback((active: boolean) => {
     setIsTypingMode(active);
+    if (active && window.electronAPI.platform === 'darwin') inputRef.current?.focus();
+    if (!active) inputRef.current?.blur();
   }, []));
-
-  // Clear extra context textarea when AI request consumes it
-  useIpcEvent('onExtraContextClear', useCallback(() => {
-    setExtraContext('');
-  }, []));
-
+  useIpcEvent('onExtraContextClear', useCallback(() => setExtraContext(''), []));
   useIpcEvent('onTypingEvent', useCallback((event: any) => {
-    if (event.type === 'char') {
-      setExtraContext(prev => {
-        const newVal = prev + event.char;
-        window.electronAPI?.setExtraContext?.(newVal);
-        return newVal;
-      });
-    } else if (event.type === 'command') {
-      if (event.command === 'backspace') {
-        setExtraContext(prev => {
-          const newVal = prev.slice(0, -1);
-          window.electronAPI?.setExtraContext?.(newVal);
-          return newVal;
-        });
-      } else if (event.command === 'enter') {
-        setExtraContext(prev => {
-          const newVal = prev + '\n';
-          window.electronAPI?.setExtraContext?.(newVal);
-          return newVal;
-        });
-      }
-    }
+    if (event.type === 'char') setExtraContext(prev => prev + event.char);
+    else if (event.command === 'backspace') setExtraContext(prev => prev.slice(0, -1));
+    else if (event.command === 'enter') setExtraContext(prev => prev + '\n');
   }, []));
+  useEffect(() => { void window.electronAPI.setExtraContext(extraContext); }, [extraContext]);
+  useEffect(() => {
+    document.body.classList.toggle('full-passthrough', isPassthrough);
+    return () => document.body.classList.remove('full-passthrough');
+  }, [isPassthrough]);
 
-  // Register hotkey handlers
+  const focusChat = useCallback(() => {
+    setSettingsOpen(false);
+    setIsTypingMode(true);
+    void window.electronAPI.setFocusable(true).then(() => inputRef.current?.focus());
+  }, []);
+  const sendChat = useCallback(() => {
+    if (extraContext.trim()) void runControl('submitChat', extraContext);
+    else focusChat();
+  }, [extraContext, runControl, focusChat]);
   useHotkeys({
-    toggleInteract: useCallback(() => {
-      setIsPassthrough(prev => {
-        const next = !prev;
-        document.body.classList.toggle('full-passthrough', next);
-        return next;
-      });
-    }, []),
-    openSettings: useCallback(() => {
-      setSettingsOpen(true);
-    }, []),
-    toggleRecording: useCallback(() => {
-      setIsRecording(prev => !prev);
-    }, []),
-    resetAll: useCallback(() => {
-      reset();
-      setTranscriptEntries([]);
-      setScreenshots([]);
-      setExtraContext('');
-      setIsTypingMode(false);
-      window.electronAPI?.setExtraContext?.('');
-    }, [reset]),
-    scrollUp: useCallback(() => {
-      scrollRef.current?.scrollBy({ top: -150, behavior: 'smooth' });
-    }, []),
-    scrollDown: useCallback(() => {
-      scrollRef.current?.scrollBy({ top: 150, behavior: 'smooth' });
-    }, [])
+    chat: () => {
+      if (document.activeElement === inputRef.current && extraContext.trim()) sendChat();
+      else focusChat();
+    },
+    focusChat,
+    openSettings: () => setSettingsOpen(true),
+    resetAll: () => {
+      reset(); setTranscriptEntries([]); setScreenshots([]); setExtraContext(''); setIsTypingMode(false);
+    },
+    scrollUp: () => scrollRef.current?.scrollBy({ top: -150, behavior: 'smooth' }),
+    scrollDown: () => scrollRef.current?.scrollBy({ top: 150, behavior: 'smooth' })
   });
 
-  // Load initial config
   useEffect(() => {
-    window.electronAPI?.getConfig?.('ai').then((ai: any) => {
-      if (ai?.provider) setAiProvider(ai.provider);
-      if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
+    void window.electronAPI.getConfig().then(config => {
+      setAiProvider(config.ai.provider);
+      setInterviewMode(config.ai.interviewMode);
+      setHotkeys(config.hotkeys);
     });
-    window.electronAPI?.getRecordingState?.().then((state: boolean) => {
-      setIsRecording(state);
-    });
-  }, []);
-
-  const handleToggleRecording = useCallback(async () => {
-    const newState = await window.electronAPI?.toggleRecording();
-    setIsRecording(newState);
-  }, []);
-
-  const handleAskAi = useCallback(async () => {
-    const transcript = ''; // Main process will use its own stores
-    const ocrText = await window.electronAPI?.getLastOcrText() || '';
-    await window.electronAPI?.askAi(transcript, ocrText);
-  }, []);
-
-  const handleCaptureScreen = useCallback(async () => {
-    await window.electronAPI?.captureScreen();
-  }, []);
-
-  const handleExtraContextChange = useCallback((text: string) => {
-    setExtraContext(text);
-    window.electronAPI?.setExtraContext?.(text);
+    void window.electronAPI.getWindowState().then(setWindowState);
+    void window.electronAPI.getAudioStatus().then(setAudioState);
+    void window.electronAPI.getShortcutFailures().then(setShortcutFailures);
   }, []);
 
   return (
     <>
       <OverlayPanel
-        response={response}
-        isStreaming={isStreaming}
-        error={error}
-        transcriptEntries={transcriptEntries}
-        isRecording={isRecording}
-        aiProvider={aiProvider}
-        isStealthActive={isStealthActive}
-        isPassthrough={isPassthrough}
-        isTypingMode={isTypingMode}
-        screenshots={screenshots}
-        extraContext={extraContext}
-        scrollRef={scrollRef}
+        response={response} isStreaming={isStreaming} error={controlError || error}
+        transcriptEntries={transcriptEntries} isRecording={audioState.isRecording} aiProvider={aiProvider}
+        audioState={audioState} audioLevels={audioLevels} audioError={audioError} screenState={screenState}
+        windowState={windowState} isPassthrough={isPassthrough} isTypingMode={isTypingMode}
+        screenshots={screenshots} extraContext={extraContext} scrollRef={scrollRef} inputRef={inputRef}
+        hotkeys={hotkeys} shortcutFailures={shortcutFailures}
         onSettingsClick={() => setSettingsOpen(true)}
-        onToggleRecording={handleToggleRecording}
-        onAskAi={handleAskAi}
-        onCaptureScreen={handleCaptureScreen}
-        onRemoveScreenshot={(index) => window.electronAPI?.removeScreenshot(index)}
-        onClearScreenshots={() => {
-          window.electronAPI?.clearScreenshots();
-          setScreenshots([]);
-        }}
-        onExtraContextChange={handleExtraContextChange}
+        onToggleRecording={() => void runControl('toggleRecording')}
+        onAskAi={() => void runControl('askAi')}
+        onCaptureScreen={() => void runControl('captureScreen')}
+        onHide={() => void runControl('hideOverlay')}
+        onTogglePassthrough={() => void runControl('toggleInteract')}
+        onSendChat={sendChat}
+        onExitTyping={() => { setIsTypingMode(false); void runControl('exitTyping'); }}
+        onCancel={() => void runControl('cancelStream')}
+        onRemoveScreenshot={index => void window.electronAPI.removeScreenshot(index)}
+        onClearScreenshots={() => void window.electronAPI.clearScreenshots()}
+        onExtraContextChange={setExtraContext}
       />
-      <SettingsModal
-        isOpen={settingsOpen}
-        onClose={() => {
-          setSettingsOpen(false);
-          // Refresh interviewMode in case it changed
-          window.electronAPI?.getConfig?.('ai').then((ai: any) => {
-            if (ai?.interviewMode) setInterviewMode(ai.interviewMode);
-          });
-        }}
-      />
-      {isPassthrough && <div className="interact-mode-badge">PASSTHROUGH</div>}
+      <SettingsModal isOpen={settingsOpen} shortcutFailures={shortcutFailures} onClose={() => {
+        setSettingsOpen(false);
+        void window.electronAPI.setFocusable(false);
+        void window.electronAPI.getConfig('ai').then(ai => setInterviewMode(ai.interviewMode));
+      }} />
+      {isPassthrough && <div className="interact-mode-badge">CLICK-THROUGH · {hotkeys.toggleInteract.label} to interact</div>}
     </>
   );
 };

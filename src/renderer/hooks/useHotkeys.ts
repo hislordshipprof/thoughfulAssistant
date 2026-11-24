@@ -11,7 +11,9 @@ type HotkeyAction =
   | 'openSettings'
   | 'resetAll'
   | 'scrollUp'
-  | 'scrollDown';
+  | 'scrollDown'
+  | 'chat'
+  | 'focusChat';
 
 export function useHotkeys(handlers: Partial<Record<HotkeyAction, () => void>>): void {
   const handleAction = useCallback((action: string) => {

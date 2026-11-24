@@ -1,4 +1,5 @@
-import { desktopCapturer, screen, nativeImage } from 'electron';
+import { desktopCapturer, screen } from 'electron';
+import { ensureScreenPermission, getScreenPermissionStatus, ScreenPermissionError } from './screen-permission';
 
 export interface CapturedScreen {
   imageDataUrl: string;
@@ -6,65 +7,50 @@ export interface CapturedScreen {
   width: number;
   height: number;
   timestamp: number;
+  displayId: string;
 }
 
-// OCR target width — 960px is plenty for text recognition and 4x faster than 1920px
-const OCR_WIDTH = 960;
+export function listDisplays() {
+  return screen.getAllDisplays().map((display, index) => ({
+    id: String(display.id),
+    label: display.label || 'Display ' + (index + 1) + ' (' + display.size.width + ' × ' + display.size.height + ')'
+  }));
+}
 
-export async function captureScreen(sourceId?: string, onBeforeCapture?: () => void, onAfterCapture?: () => void): Promise<CapturedScreen> {
-  onBeforeCapture?.();
-  const display = screen.getPrimaryDisplay();
-  const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
-    thumbnailSize: {
-      width: display.workAreaSize.width,
-      height: display.workAreaSize.height
-    }
-  });
-
-  let source = sources[0]; // Default to primary screen
-  if (sourceId) {
-    const found = sources.find(s => s.id === sourceId);
-    if (found) source = found;
+export async function captureScreen(displayId = 'cursor', options: { allowPermissionPrompt?: boolean } = {}): Promise<CapturedScreen> {
+  const display = displayId === 'cursor'
+    ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    : screen.getAllDisplays().find(item => String(item.id) === displayId);
+  if (!display) throw new Error('The selected display is disconnected. Choose a display in Settings.');
+  await ensureScreenPermission(options.allowPermissionPrompt ?? true);
+  const ratio = Math.min(1, 2560 / (display.size.width * display.scaleFactor));
+  let sources;
+  try {
+    sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.round(display.size.width * display.scaleFactor * ratio),
+        height: Math.round(display.size.height * display.scaleFactor * ratio)
+      }
+    });
+  } catch (error) {
+    const status = getScreenPermissionStatus();
+    if (status === 'needs-approval' || status === 'restricted') throw new ScreenPermissionError(status === 'restricted');
+    throw error;
   }
-
-  if (!source) {
-    onAfterCapture?.();
-    throw new Error('No screen source available');
+  // Fail closed if permission was revoked while capture was in flight.
+  await ensureScreenPermission(false);
+  const source = sources.find(item => item.display_id === String(display.id));
+  if (!source || source.thumbnail.isEmpty()) {
+    throw new Error('No screen image is available. Check Screen & System Audio Recording permission and restart the app.');
   }
-
   const thumbnail = source.thumbnail;
   const size = thumbnail.getSize();
-
-  // Full-res JPEG for display (smaller than PNG)
-  const imageDataUrl = `data:image/jpeg;base64,${thumbnail.toJPEG(85).toString('base64')}`;
-
-  // Scaled-down version for OCR (much faster processing)
-  const scaleFactor = OCR_WIDTH / size.width;
-  const ocrHeight = Math.round(size.height * scaleFactor);
-  const ocrImage = thumbnail.resize({ width: OCR_WIDTH, height: ocrHeight });
-  const ocrDataUrl = `data:image/jpeg;base64,${ocrImage.toJPEG(90).toString('base64')}`;
-
-  onAfterCapture?.();
-
+  const ocrImage = size.width > 1600 ? thumbnail.resize({ width: 1600 }) : thumbnail;
+  const modelImage = size.width > 1920 ? thumbnail.resize({ width: 1920 }) : thumbnail;
   return {
-    imageDataUrl,
-    ocrDataUrl,
-    width: size.width,
-    height: size.height,
-    timestamp: Date.now()
+    imageDataUrl: 'data:image/jpeg;base64,' + modelImage.toJPEG(85).toString('base64'),
+    ocrDataUrl: 'data:image/png;base64,' + ocrImage.toPNG().toString('base64'),
+    width: size.width, height: size.height, timestamp: Date.now(), displayId: String(display.id)
   };
-}
-
-export async function listSources(): Promise<Array<{ id: string; name: string; type: string }>> {
-  const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
-    thumbnailSize: { width: 150, height: 150 }
-  });
-
-  return sources.map(s => ({
-    id: s.id,
-    name: s.name,
-    type: s.id.startsWith('screen:') ? 'screen' : 'window'
-  }));
 }
